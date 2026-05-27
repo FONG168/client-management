@@ -306,6 +306,16 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
     if (!earning || earning <= 0) return toast.error('Enter a valid total earning')
     if (status === 'paid' && !paymentDate) return toast.error('Select a payment date for paid commission')
 
+    const currencyBreakdown = clientUsdtBreakdown
+      ? Object.fromEntries(
+          Object.entries(clientUsdtBreakdown).map(([cur, vals]) => {
+            const r = cur === 'USDT' ? null : (parseFloat(manualRates[cur]) || null)
+            const usdt = cur === 'USDT' ? vals.net : (r ? vals.net / r : 0)
+            return [cur, { net: vals.net, rate: r, usdt: parseFloat(usdt.toFixed(4)) }]
+          })
+        )
+      : null
+
     setSaving(true)
     try {
       const { error } = await supabase.from('commission_records').insert({
@@ -320,6 +330,7 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
         status,
         payment_date: paymentDate || null,
         notes: notes.trim() || null,
+        currency_breakdown: currencyBreakdown,
       })
       if (error) throw error
       toast.success('Commission record saved')
@@ -736,6 +747,7 @@ function CommissionStatementModal({ record, onClose }) {
       .payment-row .plabel{color:#6b7280;font-weight:600}
       .notes-block{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:11px;color:#78350f}
       .footer{margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:10px;color:#9ca3af}
+      .currency-total-row td{background:#eef2ff;font-weight:900;color:#3730a3}
       @media print{body{padding:24px 32px}@page{margin:.8cm}}
     </style></head><body>${content}</body></html>`)
     win.document.close()
@@ -805,6 +817,41 @@ function CommissionStatementModal({ record, onClose }) {
                 {client.user_id && <p className="text-xs font-mono font-bold text-indigo-500 mt-0.5">{client.user_id}</p>}
               </div>
             </div>
+
+            {/* Currency Breakdown (multi-currency only) */}
+            {record.currency_breakdown && Object.keys(record.currency_breakdown).length > 1 && (
+              <div className="mb-5">
+                <p className="text-[9px] font-black uppercase tracking-[.14em] text-gray-400 mb-2">Currency Breakdown</p>
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="px-4 py-2.5 text-left text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Currency</th>
+                        <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Net Amount</th>
+                        <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Exchange Rate</th>
+                        <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.12em] text-gray-400">≈ USDT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(record.currency_breakdown).map(([cur, vals]) => (
+                        <tr key={cur} className="border-b border-gray-100 last:border-0">
+                          <td className="px-4 py-3 text-sm font-bold text-gray-700">{cur}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700 tabular-nums">{fmtCurr(vals.net, cur)}</td>
+                          <td className="px-4 py-3 text-right text-xs text-gray-500 tabular-nums">
+                            {cur === 'USDT' ? '—' : vals.rate ? `1 USDT = ${new Intl.NumberFormat('en-US').format(vals.rate)} ${cur}` : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-bold text-gray-900 tabular-nums">${fmt(vals.usdt)}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-indigo-50">
+                        <td colSpan={3} className="px-4 py-2.5 text-xs font-black text-indigo-800">Total Earning (USDT)</td>
+                        <td className="px-4 py-2.5 text-right text-sm font-black text-indigo-700 tabular-nums">${fmt(record.total_earning)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Commission Calculation */}
             <div className="mb-5">
@@ -1516,6 +1563,19 @@ export default function Commission() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <span className="text-sm font-semibold text-gray-900">${fmt(rec.total_earning)}</span>
+                          {rec.currency_breakdown && Object.keys(rec.currency_breakdown).length > 1 && (
+                            <div className="flex flex-wrap gap-1 mt-1 justify-end">
+                              {Object.entries(rec.currency_breakdown).map(([cur, vals]) => {
+                                const c = CURRENCY_COLORS[cur] || { bg: 'bg-gray-100', value: 'text-gray-600' }
+                                return (
+                                  <span key={cur} title={cur !== 'USDT' && vals.rate ? `1 USDT = ${new Intl.NumberFormat().format(vals.rate)} ${cur}` : undefined}
+                                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${c.bg} ${c.value}`}>
+                                    {fmtCurr(vals.net, cur)}
+                                  </span>
+                                )
+                              })}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">{rec.commission_rate}%</span>
@@ -1594,6 +1654,18 @@ export default function Commission() {
                       <div className="text-center">
                         <p className="text-[10px] text-gray-400 font-semibold uppercase">Earning</p>
                         <p className="text-sm font-bold text-gray-900">${fmt(rec.total_earning)}</p>
+                        {rec.currency_breakdown && Object.keys(rec.currency_breakdown).length > 1 && (
+                          <div className="flex flex-wrap gap-0.5 mt-1 justify-center">
+                            {Object.entries(rec.currency_breakdown).map(([cur, vals]) => {
+                              const c = CURRENCY_COLORS[cur] || { bg: 'bg-gray-100', value: 'text-gray-600' }
+                              return (
+                                <span key={cur} className={`text-[9px] font-bold px-1 py-0.5 rounded ${c.bg} ${c.value}`}>
+                                  {fmtCurr(vals.net, cur)}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
                       <div className="text-center">
                         <p className="text-[10px] text-gray-400 font-semibold uppercase">Rate</p>
