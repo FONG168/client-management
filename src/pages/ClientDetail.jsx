@@ -309,13 +309,13 @@ function EditTransactionModal({ txn, onClose, onSuccess }) {
                       {type === 'withdrawal' ? 'Fee added' : 'Fee deducted'}
                     </span>
                     <span className="font-black text-rose-600">
-                      {type === 'withdrawal' ? '+' : '−'}{formatAmount(bankFeeAmount, currency)}
+                      {type === 'withdrawal' ? '+' : '−'}{formatAmount(bankFeeAmount, currency, true)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-t border-amber-200 pt-1.5">
                     <span className="text-amber-700 font-semibold">Net amount</span>
                     <div className="text-right">
-                      <span className="font-bold text-gray-700">{formatAmount(netAmount, currency)}</span>
+                      <span className="font-bold text-gray-700">{formatAmount(netAmount, currency, true)}</span>
                       {rateNum > 0 && (
                         <span className="font-black text-indigo-600 ml-2">≈ ${(netAmount / rateNum).toFixed(2)} USDT</span>
                       )}

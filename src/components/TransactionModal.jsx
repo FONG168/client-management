@@ -20,11 +20,11 @@ function fmtInput(val, currency) {
   return parts.length > 1 ? `${intPart}.${parts[1]}` : intPart
 }
 
-export function formatAmount(amount, currency) {
+export function formatAmount(amount, currency, precise = false) {
   const num = Number(amount)
   switch (currency) {
-    case 'IDR': return `Rp ${new Intl.NumberFormat('id-ID').format(Math.round(num))}`
-    case 'VND': return `₫${new Intl.NumberFormat('vi-VN').format(Math.round(num))}`
+    case 'IDR': return `Rp ${new Intl.NumberFormat('id-ID', precise ? { maximumFractionDigits: 2 } : {}).format(precise ? num : Math.round(num))}`
+    case 'VND': return `₫${new Intl.NumberFormat('vi-VN', precise ? { maximumFractionDigits: 2 } : {}).format(precise ? num : Math.round(num))}`
     case 'HKD': return `HK$${num.toFixed(2)}`
     case 'USDT':
     default:    return `$${num.toFixed(2)}`
@@ -308,14 +308,14 @@ export default function TransactionModal({ clientId, onClose, onSuccess }) {
                     <span className="text-amber-700 font-semibold">
                       {type === 'withdrawal' ? 'Fee added' : 'Fee deducted'}
                     </span>
-                    <span className={`font-black ${type === 'withdrawal' ? 'text-rose-600' : 'text-rose-600'}`}>
-                      {type === 'withdrawal' ? '+' : '−'}{formatAmount(bankFeeAmount, currency)}
+                    <span className="font-black text-rose-600">
+                      {type === 'withdrawal' ? '+' : '−'}{formatAmount(bankFeeAmount, currency, true)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-t border-amber-200 pt-1.5">
                     <span className="text-amber-700 font-semibold">Net amount</span>
                     <div className="text-right">
-                      <span className="font-bold text-gray-700">{formatAmount(netAmount, currency)}</span>
+                      <span className="font-bold text-gray-700">{formatAmount(netAmount, currency, true)}</span>
                       {rateNum > 0 && (
                         <span className="font-black text-indigo-600 ml-2">≈ ${(netAmount / rateNum).toFixed(2)} USDT</span>
                       )}
