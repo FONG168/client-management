@@ -864,129 +864,119 @@ export default function ClientDetail() {
         )}
       </div>
 
-      {/* Balance Summary — per currency */}
+      {/* Balance Summary + USDT Conversion — unified card per currency */}
       {activeCurrencies.length === 0 ? null : (
-        <div className="space-y-3 mb-6">
-          {activeCurrencies.map((cur) => {
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
+          {/* Header */}
+          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {activeCurrencies.map(cur => (
+                cur === 'USDT'
+                  ? <span key={cur} className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full"><UsdtIcon size={11} /> USDT</span>
+                  : <span key={cur} className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">{cur}</span>
+              ))}
+              <span className="text-xs text-gray-400">Balance Summary</span>
+            </div>
+            {activeCurrencies.some(c => c !== 'USDT') && (
+              <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                <UsdtIcon size={10} /> {ratesLoading ? 'Fetching rates…' : 'Live rate · editable'}
+              </span>
+            )}
+          </div>
+
+          {/* One row per currency */}
+          {activeCurrencies.map((cur, idx) => {
             const { topups, withdrawals, topupFees, withdrawalFees, totalFees, balance } = balanceByCurrency[cur]
+            const rate = parseFloat(conversionRates[cur]) || 0
+            const usdtVal = cur !== 'USDT' && rate > 0 ? balance / rate : null
             return (
-              <div key={cur} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-                  {cur === 'USDT'
-                    ? <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full"><UsdtIcon size={12} /> USDT</span>
-                    : <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">{cur}</span>
-                  }
-                  <span className="text-xs text-gray-400">Balance Summary</span>
-                </div>
+              <div key={cur} className={idx > 0 ? 'border-t border-gray-100' : ''}>
+                {/* Top-ups / Withdrawals / Balance */}
                 <div className="grid grid-cols-3 divide-x divide-gray-100">
-                  <div className="p-4 text-center">
-                    <p className="text-xs text-green-600 font-medium mb-1 flex items-center justify-center gap-1">
-                      <TrendingUp size={12} /> Top-ups
+                  <div className="px-4 py-3 text-center">
+                    <p className="text-[10px] text-green-600 font-semibold mb-0.5 flex items-center justify-center gap-1">
+                      <TrendingUp size={11} /> Top-ups
                     </p>
-                    <p className="text-base font-bold text-green-700">{formatAmount(topups, cur)}</p>
+                    <p className="text-sm font-bold text-green-700">{formatAmount(topups, cur)}</p>
                   </div>
-                  <div className="p-4 text-center">
-                    <p className="text-xs text-red-600 font-medium mb-1 flex items-center justify-center gap-1">
-                      <TrendingDown size={12} /> Withdrawals
+                  <div className="px-4 py-3 text-center">
+                    <p className="text-[10px] text-red-500 font-semibold mb-0.5 flex items-center justify-center gap-1">
+                      <TrendingDown size={11} /> Withdrawals
                     </p>
-                    <p className="text-base font-bold text-red-700">{formatAmount(withdrawals, cur)}</p>
+                    <p className="text-sm font-bold text-red-600">{formatAmount(withdrawals, cur)}</p>
                   </div>
-                  <div className="p-4 text-center">
-                    <p className={`text-xs font-medium mb-1 flex items-center justify-center gap-1 ${balance >= 0 ? 'text-indigo-600' : 'text-orange-600'}`}>
-                      <Wallet size={12} /> Balance
+                  <div className="px-4 py-3 text-center">
+                    <p className={`text-[10px] font-semibold mb-0.5 flex items-center justify-center gap-1 ${balance >= 0 ? 'text-indigo-500' : 'text-orange-500'}`}>
+                      <Wallet size={11} /> Balance
                     </p>
-                    <p className={`text-base font-bold ${balance >= 0 ? 'text-indigo-700' : 'text-orange-700'}`}>
+                    <p className={`text-sm font-bold ${balance >= 0 ? 'text-indigo-700' : 'text-orange-700'}`}>
                       {formatAmount(balance, cur)}
                     </p>
                   </div>
                 </div>
+
+                {/* Fees row */}
                 {totalFees > 0 && (
-                  <div className="px-5 py-2.5 border-t border-amber-100 bg-amber-50 space-y-1">
+                  <div className="px-5 py-1.5 bg-amber-50 border-t border-amber-100 flex flex-wrap gap-x-6 gap-y-0.5">
                     {topupFees > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-amber-700 font-semibold flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-                          Top-up Fee Deducted
-                        </span>
-                        <span className="text-xs font-black text-rose-600">−{formatAmount(topupFees, cur)}</span>
-                      </div>
+                      <span className="text-[10px] text-amber-700 font-semibold flex items-center gap-1">
+                        <span className="w-1 h-1 rounded-full bg-amber-400 inline-block" />
+                        Top-up fee: −{formatAmount(topupFees, cur)}
+                      </span>
                     )}
                     {withdrawalFees > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-amber-700 font-semibold flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-                          Withdrawal Fee Added
-                        </span>
-                        <span className="text-xs font-black text-rose-600">+{formatAmount(withdrawalFees, cur)}</span>
-                      </div>
+                      <span className="text-[10px] text-amber-700 font-semibold flex items-center gap-1">
+                        <span className="w-1 h-1 rounded-full bg-amber-400 inline-block" />
+                        Withdrawal fee: +{formatAmount(withdrawalFees, cur)}
+                      </span>
                     )}
+                  </div>
+                )}
+
+                {/* USDT rate input (non-USDT only) */}
+                {cur !== 'USDT' && (
+                  <div className="px-5 py-3 bg-indigo-50/40 border-t border-indigo-100/60 flex items-center gap-3">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider shrink-0">1 USDT =</span>
+                    <input
+                      type="number"
+                      value={conversionRates[cur]}
+                      onChange={e => setConversionRates(prev => ({ ...prev, [cur]: e.target.value }))}
+                      placeholder="Enter rate…"
+                      min="0"
+                      step="any"
+                      className="w-32 px-3 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                    />
+                    <span className="text-xs font-bold text-gray-400 shrink-0">{cur}</span>
+                    <div className="flex-1 text-right">
+                      {usdtVal !== null
+                        ? <span className={`text-sm font-black ${usdtVal >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>≈ ${usdtVal.toFixed(2)} USDT</span>
+                        : <span className="text-[11px] text-gray-300 italic">enter rate to convert</span>
+                      }
+                    </div>
                   </div>
                 )}
               </div>
             )
           })}
-        </div>
-      )}
 
-      {/* USDT Conversion Box — shown when client has non-USDT currencies */}
-      {activeCurrencies.some(c => c !== 'USDT') && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-6 overflow-hidden">
-          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-            <UsdtIcon size={14} />
-            <span className="text-xs font-bold text-indigo-600">USDT Conversion</span>
-            {ratesLoading && <span className="text-[10px] text-indigo-400 font-semibold">Fetching live rates…</span>}
-            {!ratesLoading && <span className="text-[10px] text-gray-400">Live rate · editable</span>}
-          </div>
-          <div className="p-5 space-y-3">
-            {activeCurrencies.filter(c => c !== 'USDT').map(cur => {
-              const { balance } = balanceByCurrency[cur]
-              const rate = parseFloat(conversionRates[cur]) || 0
-              const usdtVal = rate > 0 ? balance / rate : null
-              return (
-                <div key={cur} className="flex items-center gap-3">
-                  <span className="text-xs font-black text-gray-500 w-10 shrink-0">{cur}</span>
-                  <div className="flex items-center gap-1.5 shrink-0 text-xs text-gray-400 font-semibold">
-                    <span>1</span>
-                    <UsdtIcon size={11} />
-                    <span>=</span>
-                  </div>
-                  <input
-                    type="number"
-                    value={conversionRates[cur]}
-                    onChange={e => setConversionRates(prev => ({ ...prev, [cur]: e.target.value }))}
-                    placeholder="Enter rate…"
-                    min="0"
-                    step="any"
-                    className="w-36 px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                  />
-                  <span className="text-xs font-bold text-gray-400 shrink-0">{cur}</span>
-                  <div className="flex-1 text-right">
-                    {usdtVal !== null
-                      ? <span className={`text-sm font-black ${usdtVal >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>≈ ${usdtVal.toFixed(2)} USDT</span>
-                      : <span className="text-xs text-gray-300 italic">— enter rate</span>
-                    }
-                  </div>
+          {/* Total USDT footer — only when all non-USDT rates are filled */}
+          {activeCurrencies.some(c => c !== 'USDT') && (() => {
+            const usdtDirect = balanceByCurrency['USDT']?.balance || 0
+            const allFilled = activeCurrencies.filter(c => c !== 'USDT').every(c => parseFloat(conversionRates[c]) > 0)
+            if (!allFilled) return null
+            const total = usdtDirect + activeCurrencies.filter(c => c !== 'USDT').reduce((sum, c) => {
+              return sum + balanceByCurrency[c].balance / parseFloat(conversionRates[c])
+            }, 0)
+            return (
+              <div className="px-5 py-3 border-t-2 border-indigo-100 bg-indigo-50 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <UsdtIcon size={14} />
+                  <span className="text-xs font-black text-indigo-800 uppercase tracking-wider">Total Balance in USDT</span>
                 </div>
-              )
-            })}
-            {/* Total USDT row when multiple non-USDT currencies */}
-            {(() => {
-              const usdtDirect = balanceByCurrency['USDT']?.balance || 0
-              const converted = activeCurrencies.filter(c => c !== 'USDT').reduce((sum, cur) => {
-                const rate = parseFloat(conversionRates[cur]) || 0
-                return rate > 0 ? sum + balanceByCurrency[cur].balance / rate : sum
-              }, 0)
-              const allRatesFilled = activeCurrencies.filter(c => c !== 'USDT').every(c => parseFloat(conversionRates[c]) > 0)
-              if (!allRatesFilled) return null
-              const total = usdtDirect + converted
-              return (
-                <div className="mt-1 pt-3 border-t border-gray-100 flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Balance in USDT</span>
-                  <span className={`text-base font-black ${total >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>${total.toFixed(2)} USDT</span>
-                </div>
-              )
-            })()}
-          </div>
+                <span className={`text-base font-black ${total >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>${total.toFixed(2)} USDT</span>
+              </div>
+            )
+          })()}
         </div>
       )}
 
