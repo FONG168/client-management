@@ -536,19 +536,17 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {Object.entries(balanceByCurrency).map(([cur, { topups, withdrawals, topupFees, withdrawalFees, totalFees, balance }], i, arr) => (
+                      {Object.entries(balanceByCurrency).map(([cur, { topupFees, withdrawalFees, netTopups, netWithdrawals, balance }], i, arr) => (
                         <tr key={cur} className={i < arr.length - 1 ? 'border-b border-gray-100' : ''}>
-                          <td className="px-4 py-3 font-black text-gray-900 text-sm">
-                            {cur}
-                            {topupFees > 0 && (
-                              <p className="text-[10px] font-semibold text-amber-600 mt-0.5">−{formatAmount(topupFees, cur)} top-up fee</p>
-                            )}
-                            {withdrawalFees > 0 && (
-                              <p className="text-[10px] font-semibold text-amber-600 mt-0.5">+{formatAmount(withdrawalFees, cur)} withdrawal fee</p>
-                            )}
+                          <td className="px-4 py-3 font-black text-gray-900 text-sm">{cur}</td>
+                          <td className="px-4 py-3 text-right font-bold text-green-600 tabular-nums text-sm">
+                            {formatAmount(netTopups, cur)}
+                            {topupFees > 0 && <p className="text-[9px] text-amber-500 mt-0.5">−{formatAmount(topupFees, cur)} fee</p>}
                           </td>
-                          <td className="px-4 py-3 text-right font-bold text-green-600 tabular-nums text-sm">{formatAmount(topups, cur)}</td>
-                          <td className="px-4 py-3 text-right font-bold text-red-600 tabular-nums text-sm">{formatAmount(withdrawals, cur)}</td>
+                          <td className="px-4 py-3 text-right font-bold text-red-600 tabular-nums text-sm">
+                            {formatAmount(netWithdrawals, cur)}
+                            {withdrawalFees > 0 && <p className="text-[9px] text-amber-500 mt-0.5">+{formatAmount(withdrawalFees, cur)} fee</p>}
+                          </td>
                           <td className={`px-4 py-3 text-right font-black tabular-nums text-sm ${balance >= 0 ? 'text-gray-900' : 'text-orange-600'}`}>{formatAmount(balance, cur)}</td>
                         </tr>
                       ))}
@@ -623,20 +621,20 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                       ))}
                     </tbody>
                     {/* Totals row */}
-                    {Object.entries(balanceByCurrency).map(([cur, { topups, withdrawals, topupFees, withdrawalFees, totalFees, balance }]) => (
+                    {Object.entries(balanceByCurrency).map(([cur, { topupFees, withdrawalFees, netTopups, netWithdrawals, balance }]) => (
                       <tfoot key={cur}>
                         <tr style={{ background: '#1e293b' }}>
                           <td className="px-4 py-3 align-middle" colSpan={2}>
                             <p className="text-[10px] font-black uppercase tracking-wider text-white/60">Total ({cur})</p>
-                            {topupFees > 0 && (
-                              <p className="text-[10px] text-amber-300/80 font-medium mt-0.5">−{formatAmount(topupFees, cur)} top-up fee</p>
-                            )}
-                            {withdrawalFees > 0 && (
-                              <p className="text-[10px] text-amber-300/80 font-medium mt-0.5">+{formatAmount(withdrawalFees, cur)} withdrawal fee</p>
-                            )}
                           </td>
-                          <td className="px-4 py-3 text-right text-sm font-black text-white/70 tabular-nums align-middle">{formatAmount(withdrawals, cur)}</td>
-                          <td className="px-4 py-3 text-right text-sm font-black text-white/70 tabular-nums align-middle">{formatAmount(topups, cur)}</td>
+                          <td className="px-4 py-3 text-right text-sm font-black text-white/70 tabular-nums align-middle">
+                            {formatAmount(netWithdrawals, cur)}
+                            {withdrawalFees > 0 && <p className="text-[9px] text-amber-300/80 mt-0.5">+{formatAmount(withdrawalFees, cur)} fee</p>}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-black text-white/70 tabular-nums align-middle">
+                            {formatAmount(netTopups, cur)}
+                            {topupFees > 0 && <p className="text-[9px] text-amber-300/80 mt-0.5">−{formatAmount(topupFees, cur)} fee</p>}
+                          </td>
                           <td className="px-4 py-3 text-right text-sm font-black text-white tabular-nums align-middle">{formatAmount(balance, cur)}</td>
                         </tr>
                       </tfoot>
@@ -752,8 +750,10 @@ export default function ClientDetail() {
     const topupFees = txns.filter((t) => t.type === 'topup').reduce((s, t) => s + Number(t.bank_fee_amount || 0), 0)
     const withdrawalFees = txns.filter((t) => t.type === 'withdrawal').reduce((s, t) => s + Number(t.bank_fee_amount || 0), 0)
     const totalFees = topupFees + withdrawalFees
-    // balance = (topups - topupFees) - (withdrawals + withdrawalFees)
-    acc[cur] = { topups, withdrawals, topupFees, withdrawalFees, totalFees, balance: topups - withdrawals - totalFees }
+    const netTopups = topups - topupFees         // top-up net: fee deducted
+    const netWithdrawals = withdrawals + withdrawalFees  // withdrawal net: fee added
+    const balance = netTopups - netWithdrawals
+    acc[cur] = { topups, withdrawals, topupFees, withdrawalFees, totalFees, netTopups, netWithdrawals, balance }
     return acc
   }, {})
   const activeCurrencies = Object.keys(balanceByCurrency)
@@ -889,24 +889,30 @@ export default function ClientDetail() {
 
           {/* One row per currency */}
           {activeCurrencies.map((cur, idx) => {
-            const { topups, withdrawals, topupFees, withdrawalFees, totalFees, balance } = balanceByCurrency[cur]
+            const { topups, withdrawals, topupFees, withdrawalFees, totalFees, netTopups, netWithdrawals, balance } = balanceByCurrency[cur]
             const rate = parseFloat(conversionRates[cur]) || 0
             const usdtVal = cur !== 'USDT' && rate > 0 ? balance / rate : null
             return (
               <div key={cur} className={idx > 0 ? 'border-t border-gray-100' : ''}>
-                {/* Top-ups / Withdrawals / Balance */}
+                {/* Net Top-ups / Net Withdrawals / Balance */}
                 <div className="grid grid-cols-3 divide-x divide-gray-100">
                   <div className="px-4 py-3 text-center">
                     <p className="text-[10px] text-green-600 font-semibold mb-0.5 flex items-center justify-center gap-1">
                       <TrendingUp size={11} /> Top-ups
                     </p>
-                    <p className="text-sm font-bold text-green-700">{formatAmount(topups, cur)}</p>
+                    <p className="text-sm font-bold text-green-700">{formatAmount(netTopups, cur)}</p>
+                    {topupFees > 0 && (
+                      <p className="text-[9px] text-amber-600 mt-0.5">−{formatAmount(topupFees, cur)} fee</p>
+                    )}
                   </div>
                   <div className="px-4 py-3 text-center">
                     <p className="text-[10px] text-red-500 font-semibold mb-0.5 flex items-center justify-center gap-1">
                       <TrendingDown size={11} /> Withdrawals
                     </p>
-                    <p className="text-sm font-bold text-red-600">{formatAmount(withdrawals, cur)}</p>
+                    <p className="text-sm font-bold text-red-600">{formatAmount(netWithdrawals, cur)}</p>
+                    {withdrawalFees > 0 && (
+                      <p className="text-[9px] text-amber-600 mt-0.5">+{formatAmount(withdrawalFees, cur)} fee</p>
+                    )}
                   </div>
                   <div className="px-4 py-3 text-center">
                     <p className={`text-[10px] font-semibold mb-0.5 flex items-center justify-center gap-1 ${balance >= 0 ? 'text-indigo-500' : 'text-orange-500'}`}>
@@ -917,24 +923,6 @@ export default function ClientDetail() {
                     </p>
                   </div>
                 </div>
-
-                {/* Fees row */}
-                {totalFees > 0 && (
-                  <div className="px-5 py-1.5 bg-amber-50 border-t border-amber-100 flex flex-wrap gap-x-6 gap-y-0.5">
-                    {topupFees > 0 && (
-                      <span className="text-[10px] text-amber-700 font-semibold flex items-center gap-1">
-                        <span className="w-1 h-1 rounded-full bg-amber-400 inline-block" />
-                        Top-up fee: −{formatAmount(topupFees, cur)}
-                      </span>
-                    )}
-                    {withdrawalFees > 0 && (
-                      <span className="text-[10px] text-amber-700 font-semibold flex items-center gap-1">
-                        <span className="w-1 h-1 rounded-full bg-amber-400 inline-block" />
-                        Withdrawal fee: +{formatAmount(withdrawalFees, cur)}
-                      </span>
-                    )}
-                  </div>
-                )}
 
                 {/* USDT rate input (non-USDT only) */}
                 {cur !== 'USDT' && (
