@@ -406,10 +406,13 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
   const txnWithBalance = [...transactions].reverse().reduce((acc, txn) => {
     const prev = acc.length > 0 ? acc[acc.length - 1].runningBalance : 0
     const fee = Number(txn.bank_fee_amount || 0)
+    const netDisplay = txn.type === 'topup'
+      ? Number(txn.amount) - fee
+      : Number(txn.amount) + fee
     const runningBalance = txn.type === 'topup'
-      ? prev + Number(txn.amount) - fee
-      : prev - Number(txn.amount) - fee
-    return [...acc, { ...txn, runningBalance }]
+      ? prev + netDisplay
+      : prev - netDisplay
+    return [...acc, { ...txn, runningBalance, netDisplay }]
   }, []).reverse()
 
   const now = new Date()
@@ -604,13 +607,13 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                           {/* Debit */}
                           <td className="px-4 py-3 text-right align-middle tabular-nums">
                             {txn.type === 'withdrawal'
-                              ? <span className="text-sm font-bold text-red-600">{formatAmount(Number(txn.amount), txn.currency || 'USDT')}</span>
+                              ? <span className="text-sm font-bold text-red-600">{formatAmount(txn.netDisplay, txn.currency || 'USDT')}</span>
                               : <span className="text-gray-300">—</span>}
                           </td>
                           {/* Credit */}
                           <td className="px-4 py-3 text-right align-middle tabular-nums">
                             {txn.type === 'topup'
-                              ? <span className="text-sm font-bold text-green-600">{formatAmount(Number(txn.amount), txn.currency || 'USDT')}</span>
+                              ? <span className="text-sm font-bold text-green-600">{formatAmount(txn.netDisplay, txn.currency || 'USDT')}</span>
                               : <span className="text-gray-300">—</span>}
                           </td>
                           {/* Balance */}
@@ -764,10 +767,13 @@ export default function ClientDetail() {
   const txnWithBalance = [...transactions].reverse().reduce((acc, txn) => {
     const prev = acc.length > 0 ? acc[acc.length - 1].runningBalance : 0
     const fee = Number(txn.bank_fee_amount || 0)
+    const netDisplay = txn.type === 'topup'
+      ? Number(txn.amount) - fee     // top-up net: fee deducted
+      : Number(txn.amount) + fee     // withdrawal net: fee added
     const runningBalance = txn.type === 'topup'
-      ? prev + Number(txn.amount) - fee
-      : prev - Number(txn.amount) - fee
-    return [...acc, { ...txn, runningBalance }]
+      ? prev + netDisplay
+      : prev - netDisplay
+    return [...acc, { ...txn, runningBalance, netDisplay }]
   }, []).reverse()
 
   return (
@@ -1059,11 +1065,11 @@ export default function ClientDetail() {
                   </button>
                   <div className="text-right">
                     <p className={`text-sm font-bold ${txn.type === 'topup' ? 'text-green-600' : 'text-red-600'}`}>
-                      {txn.type === 'topup' ? '+' : '-'}{formatAmount(Number(txn.amount), txn.currency || 'USDT')}
+                      {txn.type === 'topup' ? '+' : '−'}{formatAmount(txn.netDisplay, txn.currency || 'USDT')}
                     </p>
-                    {Number(txn.bank_fee_amount) > 0 && (
+                    {Number(txn.bank_fee_amount) !== 0 && (
                       <p className="text-xs text-amber-600 mt-0.5">
-                        Fee: {txn.type === 'withdrawal' ? '+' : '−'}{formatAmount(Number(txn.bank_fee_amount), txn.currency || 'USDT')}
+                        Fee: {txn.type === 'withdrawal' ? '+' : '−'}{formatAmount(Math.abs(Number(txn.bank_fee_amount)), txn.currency || 'USDT')}
                       </p>
                     )}
                     <p className="text-xs text-gray-400 mt-0.5">
