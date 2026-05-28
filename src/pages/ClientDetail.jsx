@@ -675,29 +675,35 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                       {/* Totals footer */}
                       {Object.entries(balanceByCurrency).map(([cur, { topups, withdrawals, topupFees, withdrawalFees, totalFees, netTopups, netWithdrawals, balance }]) => (
                         <tfoot key={cur}>
-                          <tr style={{ background: '#1e293b' }}>
-                            <td className="px-3 py-3 whitespace-nowrap" colSpan={2}>
-                              <p className="text-[9px] font-black uppercase tracking-widest text-white/50">Total — {cur}</p>
-                            </td>
-                            {/* Gross Amt: gross deposits */}
-                            <td className="px-3 py-3 text-right whitespace-nowrap">
-                              <p className="text-[11px] font-bold text-white/70 tabular-nums">{formatAmount(topups, cur)}</p>
-                              <p className="text-[9px] text-white/35 mt-0.5">gross dep.</p>
-                            </td>
-                            {/* Bank Fee: total */}
-                            <td className="px-3 py-3 text-right whitespace-nowrap">
-                              {totalFees > 0
-                                ? <p className="text-[11px] font-bold text-amber-300/80 tabular-nums">−{formatAmount(totalFees, cur)}</p>
-                                : <span className="text-white/30 text-xs">—</span>}
-                            </td>
-                            {/* Net Amt: net deposits */}
-                            <td className="px-3 py-3 text-right whitespace-nowrap">
-                              <p className="text-[12px] font-black text-white tabular-nums">{formatAmount(netTopups, cur)}</p>
-                              <p className="text-[9px] text-white/35 mt-0.5">net dep.</p>
-                            </td>
-                            {/* Balance */}
-                            <td className={`px-3 py-3 text-right whitespace-nowrap text-[12px] font-black tabular-nums ${balance >= 0 ? 'text-indigo-300' : 'text-orange-400'}`}>
-                              {formatAmount(balance, cur)}
+                          <tr style={{ background: '#0f172a' }}>
+                            <td colSpan={6} className="px-4 py-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <p className="text-[9px] font-black uppercase tracking-[.18em] text-white/40">Summary — {cur}</p>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                {/* Gross Deposits */}
+                                <div className="bg-white/5 rounded-lg px-3 py-2.5">
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-green-400/70 mb-1">Gross Deposits</p>
+                                  <p className="text-sm font-black text-green-300 tabular-nums whitespace-nowrap">{formatAmount(topups, cur)}</p>
+                                </div>
+                                {/* Gross Withdrawals */}
+                                <div className="bg-white/5 rounded-lg px-3 py-2.5">
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-red-400/70 mb-1">Gross Withdrawals</p>
+                                  <p className="text-sm font-black text-red-300 tabular-nums whitespace-nowrap">{formatAmount(withdrawals, cur)}</p>
+                                </div>
+                                {/* Total Bank Fees */}
+                                <div className="bg-white/5 rounded-lg px-3 py-2.5">
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-amber-400/70 mb-1">Total Bank Fees</p>
+                                  <p className="text-sm font-black text-amber-300 tabular-nums whitespace-nowrap">
+                                    {totalFees > 0 ? `−${formatAmount(totalFees, cur)}` : '—'}
+                                  </p>
+                                </div>
+                                {/* Net Balance */}
+                                <div className={`rounded-lg px-3 py-2.5 ${balance >= 0 ? 'bg-indigo-500/20' : 'bg-orange-500/20'}`}>
+                                  <p className={`text-[8px] font-black uppercase tracking-widest mb-1 ${balance >= 0 ? 'text-indigo-300/70' : 'text-orange-300/70'}`}>Net Balance</p>
+                                  <p className={`text-sm font-black tabular-nums whitespace-nowrap ${balance >= 0 ? 'text-indigo-200' : 'text-orange-300'}`}>{formatAmount(balance, cur)}</p>
+                                </div>
+                              </div>
                             </td>
                           </tr>
                         </tfoot>
