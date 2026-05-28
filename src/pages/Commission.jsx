@@ -1168,6 +1168,157 @@ function MarkPaidModal({ record, onClose, onSaved }) {
   )
 }
 
+// ─── Edit Commission Modal ───────────────────────────────────────────────────
+
+function EditCommissionModal({ record, onClose, onSaved }) {
+  const [status, setStatus] = useState(record.status || 'unpaid')
+  const [paymentDate, setPaymentDate] = useState(record.payment_date?.slice(0, 10) || '')
+  const [notes, setNotes] = useState(record.notes || '')
+  const [commissionAmount, setCommissionAmount] = useState(String(record.commission_amount || ''))
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const fn = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  }, [onClose])
+
+  async function handleSave(e) {
+    e.preventDefault()
+    const amount = parseFloat(commissionAmount)
+    if (isNaN(amount) || amount < 0) return toast.error('Enter a valid commission amount')
+    if (status === 'paid' && !paymentDate) return toast.error('Select a payment date for paid status')
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('commission_records')
+        .update({
+          status,
+          payment_date: paymentDate || null,
+          notes: notes.trim() || null,
+          commission_amount: amount,
+        })
+        .eq('id', record.id)
+      if (error) throw error
+      toast.success('Commission record updated')
+      onSaved()
+      onClose()
+    } catch (err) {
+      toast.error(err.message || 'Failed to update')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const emp = record.employees || {}
+  const client = record.clients || {}
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-indigo-100 rounded-xl flex items-center justify-center">
+              <Edit2 size={16} className="text-indigo-600" />
+            </div>
+            <h2 className="text-base font-bold text-gray-900">Edit Commission Record</h2>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSave} className="p-6 space-y-5">
+          {/* Read-only info */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 bg-gray-50 rounded-xl">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Employee</p>
+              <p className="text-sm font-bold text-gray-900">{emp.name || '—'}</p>
+              <p className="text-xs text-indigo-600 font-semibold">{record.commission_rate}% rate</p>
+            </div>
+            <div className="p-3 bg-gray-50 rounded-xl">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Client</p>
+              <p className="text-sm font-bold text-gray-900">{client.full_name || '—'}</p>
+              {client.user_id && <p className="text-xs text-gray-400 font-mono">{client.user_id}</p>}
+            </div>
+          </div>
+
+          {/* Commission Amount */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Commission Amount (USDT)</label>
+            <div className="relative">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"><DollarSign size={15} /></div>
+              <input
+                type="number"
+                value={commissionAmount}
+                onChange={e => setCommissionAmount(e.target.value)}
+                min="0"
+                step="0.01"
+                className={inputCls}
+              />
+            </div>
+            <p className="text-[11px] text-gray-400 pl-1">Based on ${fmt(record.total_earning)} total earning × {record.commission_rate}%</p>
+          </div>
+
+          {/* Payment Status */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Payment Status</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button type="button" onClick={() => setStatus('unpaid')}
+                className={`flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                  status === 'unpaid' ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300'
+                }`}>
+                <Clock size={15} /> Unpaid
+              </button>
+              <button type="button" onClick={() => setStatus('paid')}
+                className={`flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                  status === 'paid' ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300'
+                }`}>
+                <CheckCircle2 size={15} /> Paid
+              </button>
+            </div>
+          </div>
+
+          {/* Payment Date */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+              Payment Date {status === 'paid' && <span className="text-rose-400">*</span>}
+            </label>
+            <div className="relative">
+              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"><CalendarDays size={15} /></div>
+              <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className={inputCls} />
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Notes (optional)</label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Any additional notes…"
+              rows={2}
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+              {saving ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</> : <><Save size={15} /> Save Changes</>}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── Delete Confirm Modal ────────────────────────────────────────────────────
 
 function DeleteModal({ title, message, onClose, onConfirm, loading }) {
@@ -1211,6 +1362,7 @@ export default function Commission() {
   const [deletingEmployee, setDeletingEmployee] = useState(false)
 
   const [showAddCommission, setShowAddCommission] = useState(false)
+  const [editRecord, setEditRecord] = useState(null)
   const [markPaidRecord, setMarkPaidRecord] = useState(null)
   const [statementRecord, setStatementRecord] = useState(null)
   const [receiptRecord, setReceiptRecord] = useState(null)
@@ -1611,6 +1763,10 @@ export default function Commission() {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center gap-1">
+                            <button onClick={() => setEditRecord(rec)} title="Edit record"
+                              className="p-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                              <Edit2 size={14} />
+                            </button>
                             <button onClick={() => setStatementRecord(rec)} title="View statement"
                               className="p-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
                               <FileText size={14} />
@@ -1679,6 +1835,10 @@ export default function Commission() {
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-gray-400">{fmtDate(rec.payment_date)}</p>
                       <div className="flex items-center gap-1">
+                        <button onClick={() => setEditRecord(rec)} title="Edit record"
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                          <Edit2 size={13} />
+                        </button>
                         <button onClick={() => setStatementRecord(rec)} title="View statement"
                           className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
                           <FileText size={13} />
@@ -1720,6 +1880,13 @@ export default function Commission() {
           onSaved={fetchAll}
           employees={employees}
           clients={clients}
+        />
+      )}
+      {editRecord && (
+        <EditCommissionModal
+          record={editRecord}
+          onClose={() => setEditRecord(null)}
+          onSaved={fetchAll}
         />
       )}
       {statementRecord && (
