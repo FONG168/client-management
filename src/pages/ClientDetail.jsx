@@ -606,15 +606,25 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                           </td>
                           {/* Debit */}
                           <td className="px-4 py-3 text-right align-middle tabular-nums">
-                            {txn.type === 'withdrawal'
-                              ? <span className="text-sm font-bold text-red-600">{formatAmount(txn.netDisplay, txn.currency || 'USDT')}</span>
-                              : <span className="text-gray-300">—</span>}
+                            {txn.type === 'withdrawal' ? (
+                              <div>
+                                <span className="text-sm font-bold text-red-600">{formatAmount(Number(txn.amount), txn.currency || 'USDT')}</span>
+                                {Number(txn.bank_fee_amount) !== 0 && (
+                                  <p className="text-[10px] text-red-500 font-semibold mt-0.5">Net: {formatAmount(txn.netDisplay, txn.currency || 'USDT')}</p>
+                                )}
+                              </div>
+                            ) : <span className="text-gray-300">—</span>}
                           </td>
                           {/* Credit */}
                           <td className="px-4 py-3 text-right align-middle tabular-nums">
-                            {txn.type === 'topup'
-                              ? <span className="text-sm font-bold text-green-600">{formatAmount(txn.netDisplay, txn.currency || 'USDT')}</span>
-                              : <span className="text-gray-300">—</span>}
+                            {txn.type === 'topup' ? (
+                              <div>
+                                <span className="text-sm font-bold text-green-600">{formatAmount(Number(txn.amount), txn.currency || 'USDT')}</span>
+                                {Number(txn.bank_fee_amount) !== 0 && (
+                                  <p className="text-[10px] text-green-600 font-semibold mt-0.5">Net: {formatAmount(txn.netDisplay, txn.currency || 'USDT')}</p>
+                                )}
+                              </div>
+                            ) : <span className="text-gray-300">—</span>}
                           </td>
                           {/* Balance */}
                           <td className={`px-4 py-3 text-right align-middle text-sm font-bold tabular-nums ${txn.runningBalance >= 0 ? 'text-gray-800' : 'text-orange-600'}`}>
@@ -896,39 +906,63 @@ export default function ClientDetail() {
           {/* One row per currency */}
           {activeCurrencies.map((cur, idx) => {
             const { topups, withdrawals, topupFees, withdrawalFees, totalFees, netTopups, netWithdrawals, balance } = balanceByCurrency[cur]
+            const grossBalance = topups - withdrawals
             const rate = parseFloat(conversionRates[cur]) || 0
             const usdtVal = cur !== 'USDT' && rate > 0 ? balance / rate : null
             return (
               <div key={cur} className={idx > 0 ? 'border-t border-gray-100' : ''}>
-                {/* Net Top-ups / Net Withdrawals / Balance */}
-                <div className="grid grid-cols-3 divide-x divide-gray-100">
-                  <div className="px-4 py-3 text-center">
-                    <p className="text-[10px] text-green-600 font-semibold mb-0.5 flex items-center justify-center gap-1">
-                      <TrendingUp size={11} /> Top-ups
+                {/* Column headers */}
+                <div className="grid grid-cols-3 divide-x divide-gray-100 bg-gray-50/60 border-b border-gray-100">
+                  <div className="px-4 py-2 text-center">
+                    <p className="text-[10px] text-green-600 font-bold flex items-center justify-center gap-1">
+                      <TrendingUp size={10} /> Top-ups
                     </p>
-                    <p className="text-sm font-bold text-green-700">{formatAmount(netTopups, cur)}</p>
-                    {topupFees > 0 && (
-                      <p className="text-[9px] text-amber-600 mt-0.5">−{formatAmount(topupFees, cur)} fee</p>
-                    )}
                   </div>
-                  <div className="px-4 py-3 text-center">
-                    <p className="text-[10px] text-red-500 font-semibold mb-0.5 flex items-center justify-center gap-1">
-                      <TrendingDown size={11} /> Withdrawals
+                  <div className="px-4 py-2 text-center">
+                    <p className="text-[10px] text-red-500 font-bold flex items-center justify-center gap-1">
+                      <TrendingDown size={10} /> Withdrawals
                     </p>
-                    <p className="text-sm font-bold text-red-600">{formatAmount(netWithdrawals, cur)}</p>
-                    {withdrawalFees > 0 && (
-                      <p className="text-[9px] text-amber-600 mt-0.5">+{formatAmount(withdrawalFees, cur)} fee</p>
-                    )}
                   </div>
-                  <div className="px-4 py-3 text-center">
-                    <p className={`text-[10px] font-semibold mb-0.5 flex items-center justify-center gap-1 ${balance >= 0 ? 'text-indigo-500' : 'text-orange-500'}`}>
-                      <Wallet size={11} /> Balance
-                    </p>
-                    <p className={`text-sm font-bold ${balance >= 0 ? 'text-indigo-700' : 'text-orange-700'}`}>
-                      {formatAmount(balance, cur)}
+                  <div className="px-4 py-2 text-center">
+                    <p className={`text-[10px] font-bold flex items-center justify-center gap-1 ${balance >= 0 ? 'text-indigo-500' : 'text-orange-500'}`}>
+                      <Wallet size={10} /> Balance
                     </p>
                   </div>
                 </div>
+                {/* Gross row */}
+                <div className="grid grid-cols-3 divide-x divide-gray-100">
+                  <div className="px-4 py-2 text-center">
+                    <p className="text-[9px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Gross</p>
+                    <p className="text-sm font-bold text-green-700">{formatAmount(topups, cur)}</p>
+                  </div>
+                  <div className="px-4 py-2 text-center">
+                    <p className="text-[9px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Gross</p>
+                    <p className="text-sm font-bold text-red-600">{formatAmount(withdrawals, cur)}</p>
+                  </div>
+                  <div className="px-4 py-2 text-center">
+                    <p className="text-[9px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Gross</p>
+                    <p className={`text-sm font-bold ${grossBalance >= 0 ? 'text-gray-600' : 'text-orange-500'}`}>{formatAmount(grossBalance, cur)}</p>
+                  </div>
+                </div>
+                {/* Net row */}
+                {totalFees > 0 && (
+                  <div className="grid grid-cols-3 divide-x divide-gray-100 border-t border-dashed border-amber-200 bg-amber-50/30">
+                    <div className="px-4 py-2 text-center">
+                      <p className="text-[9px] text-amber-600 font-semibold uppercase tracking-wider mb-0.5">Net (−{formatAmount(topupFees, cur)} fee)</p>
+                      <p className="text-sm font-black text-green-700">{formatAmount(netTopups, cur)}</p>
+                    </div>
+                    <div className="px-4 py-2 text-center">
+                      <p className="text-[9px] text-amber-600 font-semibold uppercase tracking-wider mb-0.5">
+                        Net {withdrawalFees > 0 ? `(+${formatAmount(withdrawalFees, cur)} fee)` : ''}
+                      </p>
+                      <p className="text-sm font-black text-red-600">{formatAmount(netWithdrawals, cur)}</p>
+                    </div>
+                    <div className="px-4 py-2 text-center">
+                      <p className="text-[9px] text-amber-600 font-semibold uppercase tracking-wider mb-0.5">Net Balance</p>
+                      <p className={`text-sm font-black ${balance >= 0 ? 'text-indigo-700' : 'text-orange-600'}`}>{formatAmount(balance, cur)}</p>
+                    </div>
+                  </div>
+                )}
 
                 {/* USDT rate input (non-USDT only) */}
                 {cur !== 'USDT' && (
@@ -1065,12 +1099,17 @@ export default function ClientDetail() {
                   </button>
                   <div className="text-right">
                     <p className={`text-sm font-bold ${txn.type === 'topup' ? 'text-green-600' : 'text-red-600'}`}>
-                      {txn.type === 'topup' ? '+' : '−'}{formatAmount(txn.netDisplay, txn.currency || 'USDT')}
+                      {txn.type === 'topup' ? '+' : '−'}{formatAmount(Number(txn.amount), txn.currency || 'USDT')}
                     </p>
                     {Number(txn.bank_fee_amount) !== 0 && (
-                      <p className="text-xs text-amber-600 mt-0.5">
-                        Fee: {txn.type === 'withdrawal' ? '+' : '−'}{formatAmount(Math.abs(Number(txn.bank_fee_amount)), txn.currency || 'USDT')}
-                      </p>
+                      <>
+                        <p className="text-xs text-amber-600 mt-0.5">
+                          Fee: {txn.type === 'withdrawal' ? '+' : '−'}{formatAmount(Math.abs(Number(txn.bank_fee_amount)), txn.currency || 'USDT')}
+                        </p>
+                        <p className={`text-xs font-semibold mt-0.5 ${txn.type === 'topup' ? 'text-green-700' : 'text-red-700'}`}>
+                          Net: {txn.type === 'topup' ? '+' : '−'}{formatAmount(txn.netDisplay, txn.currency || 'USDT')}
+                        </p>
+                      </>
                     )}
                     <p className="text-xs text-gray-400 mt-0.5">
                       Bal: <span className={txn.runningBalance >= 0 ? 'text-gray-600' : 'text-orange-500'}>
