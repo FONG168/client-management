@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, Pencil, Trash2, ArrowUpCircle, ArrowDownCircle,
@@ -406,13 +406,9 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
   const txnWithBalance = [...transactions].reverse().reduce((acc, txn) => {
     const prev = acc.length > 0 ? acc[acc.length - 1].runningBalance : 0
     const fee = Number(txn.bank_fee_amount || 0)
-    const netDisplay = txn.type === 'topup'
-      ? Number(txn.amount) - fee
-      : Number(txn.amount) + fee
-    const runningBalance = txn.type === 'topup'
-      ? prev + netDisplay
-      : prev - netDisplay
-    return [...acc, { ...txn, runningBalance, netDisplay }]
+    const netDisplay = txn.type === 'topup' ? Number(txn.amount) - fee : Number(txn.amount) + fee
+    const runningBalance = txn.type === 'topup' ? prev + netDisplay : prev - netDisplay
+    return [...acc, { ...txn, runningBalance, netDisplay, fee }]
   }, []).reverse()
 
   const now = new Date()
@@ -427,62 +423,68 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
     const win = window.open('', '_blank')
     win.document.write(`<!DOCTYPE html><html><head><title>Statement – ${client.full_name}</title><style>
       *{box-sizing:border-box;margin:0;padding:0}
-      body{font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#111;background:#fff;padding:48px 56px}
-      .doc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #111}
-      .org{font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#4f46e5;margin-bottom:6px}
-      .title{font-size:24px;font-weight:900;color:#111;letter-spacing:-.02em}
-      .meta-right{text-align:right;font-size:11px;color:#555;line-height:1.8}
-      .meta-right strong{color:#111;font-weight:700}
-      .client-block{display:flex;justify-content:space-between;align-items:flex-start;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:16px 20px;margin-bottom:28px}
-      .client-block .label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:#9ca3af;margin-bottom:6px}
-      .client-block .name{font-size:16px;font-weight:800;color:#111;margin-bottom:4px}
-      .client-block .detail{font-size:11px;color:#555;margin-bottom:2px}
-      .section-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:#9ca3af;margin-bottom:8px}
-      table{width:100%;border-collapse:collapse}
-      .summary-table{margin-bottom:28px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
-      .summary-table th{background:#f9fafb;padding:9px 14px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:#6b7280;border-bottom:1px solid #e5e7eb}
-      .summary-table th:not(:first-child){text-align:right}
-      .summary-table td{padding:11px 14px;border-bottom:1px solid #f3f4f6;font-size:12px;vertical-align:middle}
-      .summary-table td:not(:first-child){text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
-      .summary-table tr:last-child td{border-bottom:none}
-      .txn-table{border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
-      .txn-table th{background:#f9fafb;padding:9px 14px;text-align:left;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:#6b7280;border-bottom:1px solid #e5e7eb}
-      .txn-table th:nth-child(3),.txn-table th:nth-child(4),.txn-table th:nth-child(5){text-align:right}
-      .txn-table th:nth-child(3){color:#dc2626}.txn-table th:nth-child(4){color:#16a34a}
-      .txn-table td{padding:10px 14px;border-bottom:1px solid #f3f4f6;font-size:11px;vertical-align:top}
-      .txn-table td:nth-child(3),.txn-table td:nth-child(4),.txn-table td:nth-child(5){text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
-      .txn-table tfoot td{background:#f9fafb;padding:9px 14px;font-size:11px;font-weight:800;border-top:2px solid #e5e7eb}
-      .txn-table tfoot td:nth-child(3),.txn-table tfoot td:nth-child(4),.txn-table tfoot td:nth-child(5){text-align:right;font-variant-numeric:tabular-nums}
-      .desc-main{font-weight:700;color:#111;font-size:12px}
-      .desc-cur{font-size:9px;font-weight:800;color:#4f46e5;background:#eef2ff;padding:1px 5px;border-radius:4px;margin-left:4px}
-      .desc-notes{font-size:10px;color:#9ca3af;margin-top:2px}
-      .date-primary{font-weight:700;color:#111;font-size:12px}
-      .date-secondary{color:#9ca3af;font-size:10px;margin-top:1px}
-      .footer{margin-top:32px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:10px;color:#9ca3af}
-      @media print{body{padding:24px 32px}@page{margin:.8cm}}
+      body{font-family:system-ui,-apple-system,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;padding:40px 48px}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:18px;margin-bottom:20px;border-bottom:3px solid #4f46e5}
+      .brand{font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#4f46e5;margin-bottom:5px}
+      .doc-title{font-size:26px;font-weight:900;color:#1a1a2e;letter-spacing:-.03em;line-height:1}
+      .meta{text-align:right;font-size:10px;color:#6b7280;line-height:1.9}
+      .meta b{color:#1a1a2e;font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.1em}
+      .client-row{display:flex;justify-content:space-between;align-items:center;background:#f8faff;border:1px solid #e0e7ff;border-radius:10px;padding:14px 18px;margin-bottom:22px}
+      .client-name{font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:3px}
+      .client-meta{font-size:10px;color:#6b7280}
+      .client-id{font-size:11px;font-weight:700;color:#4f46e5;background:#eef2ff;padding:3px 10px;border-radius:20px}
+      .sec-label{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.16em;color:#9ca3af;margin-bottom:8px}
+      table{width:100%;border-collapse:collapse;margin-bottom:20px}
+      .sum-table th{background:#f8faff;padding:8px 12px;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:#6b7280;border-bottom:2px solid #e0e7ff;border-top:1px solid #e0e7ff}
+      .sum-table td{padding:0;border-bottom:1px solid #f1f5f9;vertical-align:top}
+      .sum-table .row-label{padding:10px 12px;font-size:10px;font-weight:700;color:#374151;white-space:nowrap}
+      .sum-table .row-label small{display:block;font-size:8px;font-weight:600;color:#9ca3af;margin-top:1px}
+      .sum-table .num{padding:10px 12px;text-align:right;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
+      .sum-table .gross{color:#374151}.sum-table .fee-row{background:#fffbeb}.sum-table .fee-num{color:#d97706;font-size:10px}
+      .sum-table .net-row{background:#f0fdf4}.sum-table .net-dep{color:#15803d}.sum-table .net-wdw{color:#dc2626}.sum-table .net-bal{color:#4338ca;font-weight:900}
+      .txn-table th{background:#f8faff;padding:8px 12px;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:#6b7280;border-top:1px solid #e0e7ff;border-bottom:2px solid #e0e7ff}
+      .txn-table th:not(:nth-child(1)):not(:nth-child(2)){text-align:right}
+      .txn-table td{padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:10px;vertical-align:top}
+      .txn-table td:not(:nth-child(1)):not(:nth-child(2)){text-align:right;font-variant-numeric:tabular-nums}
+      .txn-table tbody tr:last-child td{border-bottom:none}
+      .type-badge{display:inline-block;font-size:8px;font-weight:800;padding:2px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.06em}
+      .badge-topup{background:#dcfce7;color:#15803d}.badge-wd{background:#fee2e2;color:#dc2626}
+      .cur-badge{font-size:8px;font-weight:800;color:#4f46e5;background:#eef2ff;padding:1px 5px;border-radius:4px;margin-left:4px}
+      .fee-note{font-size:9px;color:#d97706;margin-top:2px}
+      .net-note{font-size:9px;font-weight:700;margin-top:1px}
+      .notes-txt{font-size:9px;color:#9ca3af;margin-top:2px}
+      .gross-amt{font-size:11px;font-weight:700;color:#374151}
+      .fee-amt{font-size:9px;color:#d97706}
+      .net-cr{font-size:11px;font-weight:800;color:#15803d}
+      .net-dr{font-size:11px;font-weight:800;color:#dc2626}
+      .bal-pos{font-size:11px;font-weight:900;color:#1e293b}.bal-neg{font-size:11px;font-weight:900;color:#ea580c}
+      .tfoot-row{background:#1e293b}
+      .tfoot-row td{padding:10px 12px;font-size:10px;font-weight:800;color:rgba(255,255,255,.7);border-top:2px solid #334155}
+      .tfoot-row td:not(:nth-child(1)):not(:nth-child(2)){text-align:right;font-variant-numeric:tabular-nums}
+      .tfoot-row .tfoot-bal{color:#fff;font-size:12px}
+      .tfoot-row .tfoot-sub{font-size:8px;color:rgba(255,200,100,.8);margin-top:2px;font-weight:600}
+      .footer{display:flex;justify-content:space-between;font-size:9px;color:#9ca3af;padding-top:12px;border-top:1px solid #e5e7eb;margin-top:20px}
+      @media print{body{padding:20px 28px}@page{margin:.6cm}}
     </style></head><body>${content}</body></html>`)
-    win.document.close()
-    win.focus()
-    win.print()
-    win.close()
+    win.document.close(); win.focus(); win.print(); win.close()
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-6"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[94vh] flex flex-col overflow-hidden">
 
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-white shrink-0">
-          <div className="flex items-center gap-2 text-gray-500">
-            <FileText size={14} />
-            <span className="text-sm font-semibold text-gray-700">Account Statement</span>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-white shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-indigo-100 rounded-lg flex items-center justify-center">
+              <FileText size={13} className="text-indigo-600" />
+            </div>
+            <span className="text-sm font-bold text-gray-800">Account Statement</span>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-900 hover:bg-gray-700 text-white rounded-lg text-xs font-bold tracking-wide transition-colors">
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold tracking-wide transition-colors shadow-sm">
               <Printer size={12} /> Print / Export
             </button>
             <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
@@ -491,164 +493,202 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
           </div>
         </div>
 
-        {/* Document */}
-        <div className="overflow-y-auto flex-1 bg-white" ref={printRef}>
-          <div className="max-w-[620px] mx-auto px-8 py-8">
+        {/* Document body */}
+        <div className="overflow-y-auto flex-1 bg-gray-50/50" ref={printRef}>
+          <div className="max-w-[680px] mx-auto px-5 sm:px-8 py-7 space-y-5">
 
-            {/* Document header */}
-            <div className="doc-header flex items-start justify-between pb-5 mb-6 border-b-2 border-gray-900">
+            {/* Header */}
+            <div className="header flex items-start justify-between pb-5 border-b-[3px] border-indigo-600">
               <div>
-                <p className="org text-[10px] font-black tracking-[.16em] uppercase text-indigo-600 mb-1.5">Management Hub</p>
-                <h1 className="title text-[22px] font-black text-gray-900 leading-none tracking-tight">Account Statement</h1>
+                <p className="brand text-[9px] font-black tracking-[.2em] uppercase text-indigo-600 mb-1">Management Hub</p>
+                <h1 className="doc-title text-2xl font-black text-gray-900 tracking-tight">Account Statement</h1>
               </div>
-              <div className="meta-right text-right text-[11px] text-gray-500 leading-relaxed">
-                <div><span className="font-bold text-gray-800 text-[10px] uppercase tracking-wider">Period</span><br />{periodStr}</div>
-                <div className="mt-2"><span className="font-bold text-gray-800 text-[10px] uppercase tracking-wider">Issued</span><br />{generatedAt}</div>
+              <div className="meta text-right text-[11px] text-gray-500 leading-relaxed space-y-1.5">
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">Period</p>
+                  <p className="font-semibold text-gray-700">{periodStr}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">Issued</p>
+                  <p className="font-semibold text-gray-700">{generatedAt}</p>
+                </div>
               </div>
             </div>
 
-            {/* Client block */}
-            <div className="client-block mb-6">
-              <div className="section-label text-[9px] font-black uppercase tracking-[.14em] text-gray-400 mb-2">Account Holder</div>
+            {/* Client Info */}
+            <div className="client-row flex items-center justify-between bg-indigo-50/60 border border-indigo-100 rounded-xl px-5 py-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-black text-base shrink-0">
+                <div className="w-11 h-11 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-black text-lg shrink-0">
                   {client.full_name?.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="name text-base font-black text-gray-900">{client.full_name}</p>
-                  <div className="flex flex-wrap gap-x-4 mt-0.5">
-                    {client.email && <p className="detail text-xs text-gray-500 flex items-center gap-1"><Mail size={10} />{client.email}</p>}
-                    {client.phone && <p className="detail text-xs text-gray-500 flex items-center gap-1"><Phone size={10} />{client.phone}</p>}
+                  <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400 mb-0.5">Account Holder</p>
+                  <p className="client-name text-base font-black text-gray-900">{client.full_name}</p>
+                  <div className="flex flex-wrap gap-x-3 mt-0.5">
+                    {client.email && <p className="client-meta text-[10px] text-gray-500 flex items-center gap-1"><Mail size={9} />{client.email}</p>}
+                    {client.phone && <p className="client-meta text-[10px] text-gray-500 flex items-center gap-1"><Phone size={9} />{client.phone}</p>}
                   </div>
                 </div>
               </div>
+              {client.user_id && (
+                <span className="client-id text-xs font-black text-indigo-600 bg-indigo-100 px-3 py-1.5 rounded-full shrink-0">#{client.user_id}</span>
+              )}
             </div>
 
-            {/* Financial summary table */}
+            {/* Financial Summary */}
             {Object.entries(balanceByCurrency).length > 0 && (
-              <div className="mb-6">
-                <p className="section-label text-[9px] font-black uppercase tracking-[.14em] text-gray-400 mb-2">Financial Summary</p>
-                <div className="summary-table border border-gray-200 rounded-xl overflow-hidden">
+              <div>
+                <p className="sec-label text-[9px] font-black uppercase tracking-[.16em] text-gray-400 mb-2">Financial Summary</p>
+                <div className="sum-table border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
                   <table className="w-full">
                     <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="px-4 py-2.5 text-left text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Currency</th>
-                        <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.12em] text-green-500">Top-ups</th>
-                        <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.12em] text-red-400">Withdrawals</th>
-                        <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Net Balance</th>
+                      <tr className="bg-gray-50 border-b-2 border-gray-200">
+                        <th className="px-4 py-2.5 text-left text-[9px] font-black uppercase tracking-[.12em] text-gray-400 w-28"> </th>
+                        <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.12em] text-green-600">Deposits</th>
+                        <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.12em] text-red-500">Withdrawals</th>
+                        <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.12em] text-indigo-500">Balance</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {Object.entries(balanceByCurrency).map(([cur, { topupFees, withdrawalFees, netTopups, netWithdrawals, balance }], i, arr) => (
-                        <tr key={cur} className={i < arr.length - 1 ? 'border-b border-gray-100' : ''}>
-                          <td className="px-4 py-3 font-black text-gray-900 text-sm">{cur}</td>
-                          <td className="px-4 py-3 text-right font-bold text-green-600 tabular-nums text-sm">
-                            {formatAmount(netTopups, cur)}
-                            {topupFees > 0 && <p className="text-[9px] text-amber-500 mt-0.5">−{formatAmount(topupFees, cur)} fee</p>}
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold text-red-600 tabular-nums text-sm">
-                            {formatAmount(netWithdrawals, cur)}
-                            {withdrawalFees > 0 && <p className="text-[9px] text-amber-500 mt-0.5">+{formatAmount(withdrawalFees, cur)} fee</p>}
-                          </td>
-                          <td className={`px-4 py-3 text-right font-black tabular-nums text-sm ${balance >= 0 ? 'text-gray-900' : 'text-orange-600'}`}>{formatAmount(balance, cur)}</td>
-                        </tr>
-                      ))}
+                      {Object.entries(balanceByCurrency).map(([cur, { topups, withdrawals, topupFees, withdrawalFees, totalFees, netTopups, netWithdrawals, balance }]) => {
+                        const grossBalance = topups - withdrawals
+                        return (
+                          <React.Fragment key={cur}>
+                            {/* Gross row */}
+                            <tr className="border-b border-gray-100">
+                              <td className="row-label px-4 py-2.5">
+                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-wider">{cur}</span>
+                                <small className="text-[9px] text-gray-400 block mt-0.5">Gross</small>
+                              </td>
+                              <td className="num gross px-4 py-2.5 text-right tabular-nums text-[11px] font-semibold text-gray-700">{formatAmount(topups, cur)}</td>
+                              <td className="num gross px-4 py-2.5 text-right tabular-nums text-[11px] font-semibold text-gray-700">{formatAmount(withdrawals, cur)}</td>
+                              <td className="num gross px-4 py-2.5 text-right tabular-nums text-[11px] font-semibold text-gray-600">{formatAmount(grossBalance, cur)}</td>
+                            </tr>
+                            {/* Fee row */}
+                            {totalFees > 0 && (
+                              <tr className="border-b border-amber-100 bg-amber-50/60">
+                                <td className="row-label px-4 py-2">
+                                  <small className="text-[9px] font-black text-amber-600 uppercase tracking-wider">Bank Fees</small>
+                                </td>
+                                <td className="fee-num px-4 py-2 text-right tabular-nums text-[10px] font-semibold text-amber-600">{topupFees > 0 ? `−${formatAmount(topupFees, cur)}` : '—'}</td>
+                                <td className="fee-num px-4 py-2 text-right tabular-nums text-[10px] font-semibold text-amber-600">{withdrawalFees > 0 ? `+${formatAmount(withdrawalFees, cur)}` : '—'}</td>
+                                <td className="fee-num px-4 py-2 text-right tabular-nums text-[10px] font-semibold text-amber-600">−{formatAmount(totalFees, cur)}</td>
+                              </tr>
+                            )}
+                            {/* Net row */}
+                            <tr className="bg-indigo-50/40 border-b-2 border-indigo-100">
+                              <td className="row-label px-4 py-2.5">
+                                <small className="text-[9px] font-black text-indigo-600 uppercase tracking-wider">Net</small>
+                              </td>
+                              <td className="px-4 py-2.5 text-right tabular-nums text-[11px] font-black text-green-700">{formatAmount(netTopups, cur)}</td>
+                              <td className="px-4 py-2.5 text-right tabular-nums text-[11px] font-black text-red-600">{formatAmount(netWithdrawals, cur)}</td>
+                              <td className={`px-4 py-2.5 text-right tabular-nums text-[12px] font-black ${balance >= 0 ? 'text-indigo-700' : 'text-orange-600'}`}>{formatAmount(balance, cur)}</td>
+                            </tr>
+                          </React.Fragment>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
               </div>
             )}
 
-            {/* Transaction detail */}
+            {/* Transaction Detail */}
             <div>
-              <p className="section-label text-[9px] font-black uppercase tracking-[.14em] text-gray-400 mb-2">Transaction Detail</p>
+              <p className="sec-label text-[9px] font-black uppercase tracking-[.16em] text-gray-400 mb-2">Transaction Detail</p>
               {txnWithBalance.length === 0 ? (
-                <div className="text-center py-10 text-sm text-gray-400 border border-gray-200 rounded-xl">No transactions.</div>
+                <div className="text-center py-10 text-sm text-gray-400 border border-gray-200 rounded-xl bg-white">No transactions.</div>
               ) : (
-                <div className="txn-table border border-gray-200 rounded-xl overflow-hidden">
+                <div className="txn-table border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
                   <table className="w-full">
                     <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="px-4 py-2.5 text-left text-[9px] font-black uppercase tracking-[.12em] text-gray-400 w-28">Date</th>
-                        <th className="px-4 py-2.5 text-left text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Description</th>
-                        <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.12em] text-red-400">Debit (−)</th>
-                        <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.12em] text-green-500">Credit (+)</th>
-                        <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Balance</th>
+                      <tr className="bg-gray-50 border-b-2 border-gray-200">
+                        <th className="px-4 py-3 text-left text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Date</th>
+                        <th className="px-4 py-3 text-left text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Description</th>
+                        <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Gross Amt</th>
+                        <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.12em] text-amber-500">Bank Fee</th>
+                        <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.12em] text-indigo-500">Net Amt</th>
+                        <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Balance</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {txnWithBalance.map((txn, i, arr) => (
-                        <tr key={txn.id} className={i < arr.length - 1 ? 'border-b border-gray-100' : ''}>
-                          {/* Date */}
-                          <td className="px-4 py-3.5 whitespace-nowrap align-top">
-                            <p className="date-primary text-xs font-bold text-gray-900">
-                              {new Date(txn.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </p>
-                            <p className="date-secondary text-[11px] text-gray-400 mt-0.5">
-                              {new Date(txn.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                          </td>
-                          {/* Description */}
-                          <td className="px-4 py-3 align-middle">
-                            <p className="text-sm font-semibold text-gray-800">
-                              {txn.type === 'topup' ? 'Top-up' : 'Withdrawal'}
-                              {(txn.currency || 'USDT') === 'USDT'
-                                ? <span className="inline-flex items-center gap-0.5 ml-1.5 text-[10px] font-black text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded"><UsdtIcon size={10} /> USDT</span>
-                                : <span className="ml-1.5 text-[10px] font-black text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">{txn.currency}</span>
-                              }
-                            </p>
-                            {Number(txn.bank_fee_amount) > 0 && (
-                              <p className="text-[10px] text-amber-600 font-medium mt-0.5">
-                                Fee {txn.bank_fee_type === 'percent' ? `${txn.bank_fee_value}%` : 'fixed'}: {txn.type === 'withdrawal' ? '+' : '−'}{formatAmount(Number(txn.bank_fee_amount), txn.currency || 'USDT')}
+                      {txnWithBalance.map((txn, i, arr) => {
+                        const isTopup = txn.type === 'topup'
+                        const cur = txn.currency || 'USDT'
+                        const feeSign = isTopup ? '−' : '+'
+                        return (
+                          <tr key={txn.id} className={`hover:bg-gray-50/80 transition-colors ${i < arr.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                            {/* Date */}
+                            <td className="px-4 py-3 whitespace-nowrap align-top">
+                              <p className="text-[11px] font-bold text-gray-900">
+                                {new Date(txn.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                               </p>
-                            )}
-                            {txn.notes && <p className="text-[10px] text-gray-400 mt-0.5">{txn.notes}</p>}
-                          </td>
-                          {/* Debit */}
-                          <td className="px-4 py-3 text-right align-middle tabular-nums">
-                            {txn.type === 'withdrawal' ? (
-                              <div>
-                                <span className="text-sm font-bold text-red-600">{formatAmount(Number(txn.amount), txn.currency || 'USDT')}</span>
-                                {Number(txn.bank_fee_amount) !== 0 && (
-                                  <p className="text-[10px] text-red-500 font-semibold mt-0.5">Net: {formatAmount(txn.netDisplay, txn.currency || 'USDT')}</p>
-                                )}
+                              <p className="text-[10px] text-gray-400 mt-0.5">
+                                {new Date(txn.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </td>
+                            {/* Description */}
+                            <td className="px-4 py-3 align-top">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`type-badge text-[9px] font-black px-2 py-0.5 rounded-full ${isTopup ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                  {isTopup ? 'Top-up' : 'Withdrawal'}
+                                </span>
+                                <span className="cur-badge text-[9px] font-black text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded">{cur}</span>
                               </div>
-                            ) : <span className="text-gray-300">—</span>}
-                          </td>
-                          {/* Credit */}
-                          <td className="px-4 py-3 text-right align-middle tabular-nums">
-                            {txn.type === 'topup' ? (
-                              <div>
-                                <span className="text-sm font-bold text-green-600">{formatAmount(Number(txn.amount), txn.currency || 'USDT')}</span>
-                                {Number(txn.bank_fee_amount) !== 0 && (
-                                  <p className="text-[10px] text-green-600 font-semibold mt-0.5">Net: {formatAmount(txn.netDisplay, txn.currency || 'USDT')}</p>
-                                )}
-                              </div>
-                            ) : <span className="text-gray-300">—</span>}
-                          </td>
-                          {/* Balance */}
-                          <td className={`px-4 py-3 text-right align-middle text-sm font-bold tabular-nums ${txn.runningBalance >= 0 ? 'text-gray-800' : 'text-orange-600'}`}>
-                            {formatAmount(txn.runningBalance, txn.currency || 'USDT')}
-                          </td>
-                        </tr>
-                      ))}
+                              {txn.notes && <p className="notes-txt text-[10px] text-gray-400 mt-1">{txn.notes}</p>}
+                            </td>
+                            {/* Gross */}
+                            <td className="px-4 py-3 text-right align-top">
+                              <span className={`gross-amt text-[11px] font-semibold ${isTopup ? 'text-green-700' : 'text-red-600'}`}>
+                                {isTopup ? '+' : '−'}{formatAmount(Number(txn.amount), cur)}
+                              </span>
+                            </td>
+                            {/* Fee */}
+                            <td className="px-4 py-3 text-right align-top">
+                              {txn.fee > 0 ? (
+                                <span className="fee-amt text-[10px] font-semibold text-amber-600">
+                                  {feeSign}{formatAmount(txn.fee, cur)}
+                                  {txn.bank_fee_type === 'percent' && (
+                                    <span className="block text-[9px] text-amber-400">{txn.bank_fee_value}%</span>
+                                  )}
+                                </span>
+                              ) : <span className="text-gray-300 text-xs">—</span>}
+                            </td>
+                            {/* Net */}
+                            <td className="px-4 py-3 text-right align-top">
+                              <span className={`text-[11px] font-black ${isTopup ? 'text-green-700' : 'text-red-600'}`}>
+                                {isTopup ? '+' : '−'}{formatAmount(txn.netDisplay, cur)}
+                              </span>
+                            </td>
+                            {/* Balance */}
+                            <td className={`px-4 py-3 text-right align-top text-[11px] font-black tabular-nums ${txn.runningBalance >= 0 ? 'text-gray-900' : 'text-orange-600'}`}>
+                              {formatAmount(txn.runningBalance, cur)}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
-                    {/* Totals row */}
-                    {Object.entries(balanceByCurrency).map(([cur, { topupFees, withdrawalFees, netTopups, netWithdrawals, balance }]) => (
+                    {/* Totals footer */}
+                    {Object.entries(balanceByCurrency).map(([cur, { topups, withdrawals, topupFees, withdrawalFees, totalFees, netTopups, netWithdrawals, balance }]) => (
                       <tfoot key={cur}>
-                        <tr style={{ background: '#1e293b' }}>
-                          <td className="px-4 py-3 align-middle" colSpan={2}>
-                            <p className="text-[10px] font-black uppercase tracking-wider text-white/60">Total ({cur})</p>
+                        <tr className="tfoot-row" style={{ background: '#1e293b' }}>
+                          <td className="px-4 py-3" colSpan={2}>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-white/50">Total — {cur}</p>
                           </td>
-                          <td className="px-4 py-3 text-right text-sm font-black text-white/70 tabular-nums align-middle">
-                            {formatAmount(netWithdrawals, cur)}
-                            {withdrawalFees > 0 && <p className="text-[9px] text-amber-300/80 mt-0.5">+{formatAmount(withdrawalFees, cur)} fee</p>}
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            <p className="text-[10px] font-semibold text-white/60">{formatAmount(topups, cur)}</p>
+                            <p className="text-[9px] text-white/40 mt-0.5">gross</p>
                           </td>
-                          <td className="px-4 py-3 text-right text-sm font-black text-white/70 tabular-nums align-middle">
-                            {formatAmount(netTopups, cur)}
-                            {topupFees > 0 && <p className="text-[9px] text-amber-300/80 mt-0.5">−{formatAmount(topupFees, cur)} fee</p>}
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {totalFees > 0 && <p className="text-[10px] font-semibold text-amber-300/80">−{formatAmount(totalFees, cur)}</p>}
                           </td>
-                          <td className="px-4 py-3 text-right text-sm font-black text-white tabular-nums align-middle">{formatAmount(balance, cur)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            <p className="text-sm font-black text-white">{formatAmount(netTopups, cur)}</p>
+                            <p className="text-[9px] text-white/40 mt-0.5">net deposits</p>
+                          </td>
+                          <td className={`px-4 py-3 text-right tabular-nums text-sm font-black ${balance >= 0 ? 'text-indigo-300' : 'text-orange-400'}`}>
+                            {formatAmount(balance, cur)}
+                          </td>
                         </tr>
                       </tfoot>
                     ))}
@@ -658,7 +698,7 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
             </div>
 
             {/* Footer */}
-            <div className="footer mt-8 pt-4 border-t border-gray-200 flex justify-between text-[10px] text-gray-400">
+            <div className="footer flex items-center justify-between pt-4 border-t border-gray-200 text-[10px] text-gray-400">
               <span>Generated {generatedAt}</span>
               <span>For informational purposes only.</span>
             </div>
