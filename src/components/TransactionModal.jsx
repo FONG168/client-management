@@ -105,13 +105,13 @@ export default function TransactionModal({ clientId, onClose, onSuccess }) {
   const parsedAmt = parseFloat(amount.replace(/,/g, '')) || 0
   const rateNum = parseFloat(exchangeRate) || 0
   const usdtEquiv = rateNum > 0 && parsedAmt > 0 ? parsedAmt / rateNum : null
-  const feeVal = parseFloat(bankFeeValue.replace(/,/g, '')) || 0
-  const bankFeeAmount = feeVal > 0
+  const feeVal = parseFloat(bankFeeValue) || 0
+  const bankFeeAmount = feeVal !== 0
     ? (bankFeeType === 'percent' ? parsedAmt * (feeVal / 100) : feeVal)
     : 0
   const netAmount = type === 'withdrawal'
     ? parsedAmt + bankFeeAmount
-    : Math.max(0, parsedAmt - bankFeeAmount)
+    : parsedAmt - bankFeeAmount
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -293,25 +293,27 @@ export default function TransactionModal({ clientId, onClose, onSuccess }) {
                 </span>
                 <input
                   type="number"
-                  min="0"
                   step="any"
                   value={bankFeeValue}
                   onChange={(e) => setBankFeeValue(e.target.value)}
-                  placeholder={bankFeeType === 'percent' ? 'e.g. 2.5' : '0'}
+                  placeholder={bankFeeType === 'percent' ? 'e.g. 2.5 or -2.5' : '0'}
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm"
                 />
               </div>
               {/* Fee summary */}
-              {bankFeeAmount > 0 && parsedAmt > 0 && (
+              {bankFeeAmount !== 0 && parsedAmt > 0 && (
                 <div className="px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-amber-700 font-semibold">
-                      {type === 'withdrawal' ? 'Fee added' : 'Fee deducted'}
-                    </span>
-                    <span className="font-black text-rose-600">
-                      {type === 'withdrawal' ? '+' : '−'}{formatAmount(bankFeeAmount, currency, true)}
-                    </span>
-                  </div>
+                  {(() => {
+                    const adds = type === 'withdrawal' ? bankFeeAmount > 0 : bankFeeAmount < 0
+                    return (
+                      <div className="flex items-center justify-between">
+                        <span className="text-amber-700 font-semibold">{adds ? 'Fee added' : 'Fee deducted'}</span>
+                        <span className="font-black text-rose-600">
+                          {adds ? '+' : '−'}{formatAmount(Math.abs(bankFeeAmount), currency, true)}
+                        </span>
+                      </div>
+                    )
+                  })()}
                   <div className="flex items-center justify-between border-t border-amber-200 pt-1.5">
                     <span className="text-amber-700 font-semibold">Net amount</span>
                     <div className="text-right">
