@@ -539,8 +539,8 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
             {Object.entries(balanceByCurrency).length > 0 && (
               <div>
                 <p className="sec-label text-[9px] font-black uppercase tracking-[.16em] text-gray-400 mb-2">Financial Summary</p>
-                <div className="sum-table border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                  <table className="w-full">
+                <div className="sum-table border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm overflow-x-auto">
+                  <table className="w-full" style={{ minWidth: '360px' }}>
                     <thead>
                       <tr className="bg-gray-50 border-b-2 border-gray-200">
                         <th className="px-4 py-2.5 text-left text-[9px] font-black uppercase tracking-[.12em] text-gray-400 w-28"> </th>
@@ -560,9 +560,9 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                                 <span className="text-[10px] font-black text-gray-500 uppercase tracking-wider">{cur}</span>
                                 <small className="text-[9px] text-gray-400 block mt-0.5">Gross</small>
                               </td>
-                              <td className="num gross px-4 py-2.5 text-right tabular-nums text-[11px] font-semibold text-gray-700">{formatAmount(topups, cur)}</td>
-                              <td className="num gross px-4 py-2.5 text-right tabular-nums text-[11px] font-semibold text-gray-700">{formatAmount(withdrawals, cur)}</td>
-                              <td className="num gross px-4 py-2.5 text-right tabular-nums text-[11px] font-semibold text-gray-600">{formatAmount(grossBalance, cur)}</td>
+                              <td className="num gross px-4 py-2.5 text-right tabular-nums text-[11px] font-semibold text-gray-700 whitespace-nowrap">{formatAmount(topups, cur)}</td>
+                              <td className="num gross px-4 py-2.5 text-right tabular-nums text-[11px] font-semibold text-gray-700 whitespace-nowrap">{formatAmount(withdrawals, cur)}</td>
+                              <td className="num gross px-4 py-2.5 text-right tabular-nums text-[11px] font-semibold text-gray-600 whitespace-nowrap">{formatAmount(grossBalance, cur)}</td>
                             </tr>
                             {/* Fee row */}
                             {totalFees > 0 && (
@@ -570,9 +570,9 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                                 <td className="row-label px-4 py-2">
                                   <small className="text-[9px] font-black text-amber-600 uppercase tracking-wider">Bank Fees</small>
                                 </td>
-                                <td className="fee-num px-4 py-2 text-right tabular-nums text-[10px] font-semibold text-amber-600">{topupFees > 0 ? `−${formatAmount(topupFees, cur)}` : '—'}</td>
-                                <td className="fee-num px-4 py-2 text-right tabular-nums text-[10px] font-semibold text-amber-600">{withdrawalFees > 0 ? `+${formatAmount(withdrawalFees, cur)}` : '—'}</td>
-                                <td className="fee-num px-4 py-2 text-right tabular-nums text-[10px] font-semibold text-amber-600">−{formatAmount(totalFees, cur)}</td>
+                                <td className="fee-num px-4 py-2 text-right tabular-nums text-[10px] font-semibold text-amber-600 whitespace-nowrap">{topupFees > 0 ? `−${formatAmount(topupFees, cur)}` : '—'}</td>
+                                <td className="fee-num px-4 py-2 text-right tabular-nums text-[10px] font-semibold text-amber-600 whitespace-nowrap">{withdrawalFees > 0 ? `+${formatAmount(withdrawalFees, cur)}` : '—'}</td>
+                                <td className="fee-num px-4 py-2 text-right tabular-nums text-[10px] font-semibold text-amber-600 whitespace-nowrap">−{formatAmount(totalFees, cur)}</td>
                               </tr>
                             )}
                             {/* Net row */}
@@ -580,9 +580,9 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                               <td className="row-label px-4 py-2.5">
                                 <small className="text-[9px] font-black text-indigo-600 uppercase tracking-wider">Net</small>
                               </td>
-                              <td className="px-4 py-2.5 text-right tabular-nums text-[11px] font-black text-green-700">{formatAmount(netTopups, cur)}</td>
-                              <td className="px-4 py-2.5 text-right tabular-nums text-[11px] font-black text-red-600">{formatAmount(netWithdrawals, cur)}</td>
-                              <td className={`px-4 py-2.5 text-right tabular-nums text-[12px] font-black ${balance >= 0 ? 'text-indigo-700' : 'text-orange-600'}`}>{formatAmount(balance, cur)}</td>
+                              <td className="px-4 py-2.5 text-right tabular-nums text-[11px] font-black text-green-700 whitespace-nowrap">{formatAmount(netTopups, cur)}</td>
+                              <td className="px-4 py-2.5 text-right tabular-nums text-[11px] font-black text-red-600 whitespace-nowrap">{formatAmount(netWithdrawals, cur)}</td>
+                              <td className={`px-4 py-2.5 text-right tabular-nums text-[12px] font-black whitespace-nowrap ${balance >= 0 ? 'text-indigo-700' : 'text-orange-600'}`}>{formatAmount(balance, cur)}</td>
                             </tr>
                           </React.Fragment>
                         )
@@ -600,99 +600,110 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                 <div className="text-center py-10 text-sm text-gray-400 border border-gray-200 rounded-xl bg-white">No transactions.</div>
               ) : (
                 <div className="txn-table border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-gray-50 border-b-2 border-gray-200">
-                        <th className="px-4 py-3 text-left text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Date</th>
-                        <th className="px-4 py-3 text-left text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Description</th>
-                        <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Gross Amt</th>
-                        <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.12em] text-amber-500">Bank Fee</th>
-                        <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.12em] text-indigo-500">Net Amt</th>
-                        <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Balance</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {txnWithBalance.map((txn, i, arr) => {
-                        const isTopup = txn.type === 'topup'
-                        const cur = txn.currency || 'USDT'
-                        const feeSign = isTopup ? '−' : '+'
-                        return (
-                          <tr key={txn.id} className={`hover:bg-gray-50/80 transition-colors ${i < arr.length - 1 ? 'border-b border-gray-100' : ''}`}>
-                            {/* Date */}
-                            <td className="px-4 py-3 whitespace-nowrap align-top">
-                              <p className="text-[11px] font-bold text-gray-900">
-                                {new Date(txn.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                              </p>
-                              <p className="text-[10px] text-gray-400 mt-0.5">
-                                {new Date(txn.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                            </td>
-                            {/* Description */}
-                            <td className="px-4 py-3 align-top">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className={`type-badge text-[9px] font-black px-2 py-0.5 rounded-full ${isTopup ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                                  {isTopup ? 'Top-up' : 'Withdrawal'}
+                  {/* Horizontally scrollable on small screens */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full" style={{ minWidth: '620px' }}>
+                      <thead>
+                        <tr className="bg-gray-50 border-b-2 border-gray-200">
+                          <th className="px-3 py-3 text-left text-[9px] font-black uppercase tracking-[.12em] text-gray-400 whitespace-nowrap w-[100px]">Date</th>
+                          <th className="px-3 py-3 text-left text-[9px] font-black uppercase tracking-[.12em] text-gray-400">Description</th>
+                          <th className="px-3 py-3 text-right text-[9px] font-black uppercase tracking-[.12em] text-gray-500 whitespace-nowrap">Gross Amt</th>
+                          <th className="px-3 py-3 text-right text-[9px] font-black uppercase tracking-[.12em] text-amber-500 whitespace-nowrap">Bank Fee</th>
+                          <th className="px-3 py-3 text-right text-[9px] font-black uppercase tracking-[.12em] text-indigo-500 whitespace-nowrap">Net Amt</th>
+                          <th className="px-3 py-3 text-right text-[9px] font-black uppercase tracking-[.12em] text-gray-400 whitespace-nowrap">Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {txnWithBalance.map((txn, i, arr) => {
+                          const isTopup = txn.type === 'topup'
+                          const cur = txn.currency || 'USDT'
+                          const feeSign = isTopup ? '−' : '+'
+                          return (
+                            <tr key={txn.id} className={`hover:bg-gray-50/80 transition-colors ${i < arr.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                              {/* Date */}
+                              <td className="px-3 py-3 whitespace-nowrap align-top">
+                                <p className="text-[11px] font-bold text-gray-900">
+                                  {new Date(txn.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </p>
+                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                  {new Date(txn.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </td>
+                              {/* Description */}
+                              <td className="px-3 py-3 align-top">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full whitespace-nowrap ${isTopup ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                    {isTopup ? 'Top-up' : 'Withdrawal'}
+                                  </span>
+                                  <span className="text-[9px] font-black text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded">{cur}</span>
+                                </div>
+                                {txn.notes && <p className="text-[10px] text-gray-400 mt-1 max-w-[120px] truncate">{txn.notes}</p>}
+                              </td>
+                              {/* Gross */}
+                              <td className="px-3 py-3 text-right align-top whitespace-nowrap">
+                                <span className={`text-[11px] font-semibold tabular-nums ${isTopup ? 'text-green-700' : 'text-red-600'}`}>
+                                  {isTopup ? '+' : '−'}{formatAmount(Number(txn.amount), cur)}
                                 </span>
-                                <span className="cur-badge text-[9px] font-black text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded">{cur}</span>
-                              </div>
-                              {txn.notes && <p className="notes-txt text-[10px] text-gray-400 mt-1">{txn.notes}</p>}
-                            </td>
-                            {/* Gross */}
-                            <td className="px-4 py-3 text-right align-top">
-                              <span className={`gross-amt text-[11px] font-semibold ${isTopup ? 'text-green-700' : 'text-red-600'}`}>
-                                {isTopup ? '+' : '−'}{formatAmount(Number(txn.amount), cur)}
-                              </span>
-                            </td>
-                            {/* Fee */}
-                            <td className="px-4 py-3 text-right align-top">
-                              {txn.fee > 0 ? (
-                                <span className="fee-amt text-[10px] font-semibold text-amber-600">
-                                  {feeSign}{formatAmount(txn.fee, cur)}
-                                  {txn.bank_fee_type === 'percent' && (
-                                    <span className="block text-[9px] text-amber-400">{txn.bank_fee_value}%</span>
-                                  )}
+                              </td>
+                              {/* Fee */}
+                              <td className="px-3 py-3 text-right align-top whitespace-nowrap">
+                                {txn.fee > 0 ? (
+                                  <div>
+                                    <span className="text-[11px] font-semibold text-amber-600 tabular-nums">
+                                      {feeSign}{formatAmount(txn.fee, cur)}
+                                    </span>
+                                    {txn.bank_fee_type === 'percent' && (
+                                      <p className="text-[9px] text-amber-400 mt-0.5">{txn.bank_fee_value}%</p>
+                                    )}
+                                  </div>
+                                ) : <span className="text-gray-300 text-xs">—</span>}
+                              </td>
+                              {/* Net */}
+                              <td className="px-3 py-3 text-right align-top whitespace-nowrap">
+                                <span className={`text-[11px] font-black tabular-nums ${isTopup ? 'text-green-700' : 'text-red-600'}`}>
+                                  {isTopup ? '+' : '−'}{formatAmount(txn.netDisplay, cur)}
                                 </span>
-                              ) : <span className="text-gray-300 text-xs">—</span>}
+                              </td>
+                              {/* Balance */}
+                              <td className={`px-3 py-3 text-right align-top text-[11px] font-black tabular-nums whitespace-nowrap ${txn.runningBalance >= 0 ? 'text-gray-900' : 'text-orange-600'}`}>
+                                {formatAmount(txn.runningBalance, cur)}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                      {/* Totals footer */}
+                      {Object.entries(balanceByCurrency).map(([cur, { topups, withdrawals, topupFees, withdrawalFees, totalFees, netTopups, netWithdrawals, balance }]) => (
+                        <tfoot key={cur}>
+                          <tr style={{ background: '#1e293b' }}>
+                            <td className="px-3 py-3 whitespace-nowrap" colSpan={2}>
+                              <p className="text-[9px] font-black uppercase tracking-widest text-white/50">Total — {cur}</p>
                             </td>
-                            {/* Net */}
-                            <td className="px-4 py-3 text-right align-top">
-                              <span className={`text-[11px] font-black ${isTopup ? 'text-green-700' : 'text-red-600'}`}>
-                                {isTopup ? '+' : '−'}{formatAmount(txn.netDisplay, cur)}
-                              </span>
+                            {/* Gross Amt: gross deposits */}
+                            <td className="px-3 py-3 text-right whitespace-nowrap">
+                              <p className="text-[11px] font-bold text-white/70 tabular-nums">{formatAmount(topups, cur)}</p>
+                              <p className="text-[9px] text-white/35 mt-0.5">gross dep.</p>
+                            </td>
+                            {/* Bank Fee: total */}
+                            <td className="px-3 py-3 text-right whitespace-nowrap">
+                              {totalFees > 0
+                                ? <p className="text-[11px] font-bold text-amber-300/80 tabular-nums">−{formatAmount(totalFees, cur)}</p>
+                                : <span className="text-white/30 text-xs">—</span>}
+                            </td>
+                            {/* Net Amt: net deposits */}
+                            <td className="px-3 py-3 text-right whitespace-nowrap">
+                              <p className="text-[12px] font-black text-white tabular-nums">{formatAmount(netTopups, cur)}</p>
+                              <p className="text-[9px] text-white/35 mt-0.5">net dep.</p>
                             </td>
                             {/* Balance */}
-                            <td className={`px-4 py-3 text-right align-top text-[11px] font-black tabular-nums ${txn.runningBalance >= 0 ? 'text-gray-900' : 'text-orange-600'}`}>
-                              {formatAmount(txn.runningBalance, cur)}
+                            <td className={`px-3 py-3 text-right whitespace-nowrap text-[12px] font-black tabular-nums ${balance >= 0 ? 'text-indigo-300' : 'text-orange-400'}`}>
+                              {formatAmount(balance, cur)}
                             </td>
                           </tr>
-                        )
-                      })}
-                    </tbody>
-                    {/* Totals footer */}
-                    {Object.entries(balanceByCurrency).map(([cur, { topups, withdrawals, topupFees, withdrawalFees, totalFees, netTopups, netWithdrawals, balance }]) => (
-                      <tfoot key={cur}>
-                        <tr className="tfoot-row" style={{ background: '#1e293b' }}>
-                          <td className="px-4 py-3" colSpan={2}>
-                            <p className="text-[9px] font-black uppercase tracking-widest text-white/50">Total — {cur}</p>
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            <p className="text-[10px] font-semibold text-white/60">{formatAmount(topups, cur)}</p>
-                            <p className="text-[9px] text-white/40 mt-0.5">gross</p>
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            {totalFees > 0 && <p className="text-[10px] font-semibold text-amber-300/80">−{formatAmount(totalFees, cur)}</p>}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            <p className="text-sm font-black text-white">{formatAmount(netTopups, cur)}</p>
-                            <p className="text-[9px] text-white/40 mt-0.5">net deposits</p>
-                          </td>
-                          <td className={`px-4 py-3 text-right tabular-nums text-sm font-black ${balance >= 0 ? 'text-indigo-300' : 'text-orange-400'}`}>
-                            {formatAmount(balance, cur)}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    ))}
-                  </table>
+                        </tfoot>
+                      ))}
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
