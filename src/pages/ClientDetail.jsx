@@ -668,6 +668,8 @@ export default function ClientDetail() {
   const [showTransactionModal, setShowTransactionModal] = useState(false)
   const [showStatementModal, setShowStatementModal] = useState(false)
   const [editingTxn, setEditingTxn] = useState(null)
+  const [conversionRates, setConversionRates] = useState({ IDR: '', VND: '', HKD: '' })
+  const [ratesLoading, setRatesLoading] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -694,6 +696,21 @@ export default function ClientDetail() {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    setRatesLoading(true)
+    fetch('https://api.frankfurter.app/latest?from=USD&to=IDR,HKD')
+      .then(r => r.json())
+      .then(d => {
+        setConversionRates(prev => ({
+          ...prev,
+          IDR: d?.rates?.IDR ? String(Math.round(d.rates.IDR)) : '',
+          HKD: d?.rates?.HKD ? String(d.rates.HKD.toFixed(2)) : '',
+        }))
+      })
+      .catch(() => {})
+      .finally(() => setRatesLoading(false))
+  }, [])
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -908,6 +925,68 @@ export default function ClientDetail() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* USDT Conversion Box — shown when client has non-USDT currencies */}
+      {activeCurrencies.some(c => c !== 'USDT') && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-6 overflow-hidden">
+          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+            <UsdtIcon size={14} />
+            <span className="text-xs font-bold text-indigo-600">USDT Conversion</span>
+            {ratesLoading && <span className="text-[10px] text-indigo-400 font-semibold">Fetching live rates…</span>}
+            {!ratesLoading && <span className="text-[10px] text-gray-400">Live rate · editable</span>}
+          </div>
+          <div className="p-5 space-y-3">
+            {activeCurrencies.filter(c => c !== 'USDT').map(cur => {
+              const { balance } = balanceByCurrency[cur]
+              const rate = parseFloat(conversionRates[cur]) || 0
+              const usdtVal = rate > 0 ? balance / rate : null
+              return (
+                <div key={cur} className="flex items-center gap-3">
+                  <span className="text-xs font-black text-gray-500 w-10 shrink-0">{cur}</span>
+                  <div className="flex items-center gap-1.5 shrink-0 text-xs text-gray-400 font-semibold">
+                    <span>1</span>
+                    <UsdtIcon size={11} />
+                    <span>=</span>
+                  </div>
+                  <input
+                    type="number"
+                    value={conversionRates[cur]}
+                    onChange={e => setConversionRates(prev => ({ ...prev, [cur]: e.target.value }))}
+                    placeholder="Enter rate…"
+                    min="0"
+                    step="any"
+                    className="w-36 px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                  />
+                  <span className="text-xs font-bold text-gray-400 shrink-0">{cur}</span>
+                  <div className="flex-1 text-right">
+                    {usdtVal !== null
+                      ? <span className={`text-sm font-black ${usdtVal >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>≈ ${usdtVal.toFixed(2)} USDT</span>
+                      : <span className="text-xs text-gray-300 italic">— enter rate</span>
+                    }
+                  </div>
+                </div>
+              )
+            })}
+            {/* Total USDT row when multiple non-USDT currencies */}
+            {(() => {
+              const usdtDirect = balanceByCurrency['USDT']?.balance || 0
+              const converted = activeCurrencies.filter(c => c !== 'USDT').reduce((sum, cur) => {
+                const rate = parseFloat(conversionRates[cur]) || 0
+                return rate > 0 ? sum + balanceByCurrency[cur].balance / rate : sum
+              }, 0)
+              const allRatesFilled = activeCurrencies.filter(c => c !== 'USDT').every(c => parseFloat(conversionRates[c]) > 0)
+              if (!allRatesFilled) return null
+              const total = usdtDirect + converted
+              return (
+                <div className="mt-1 pt-3 border-t border-gray-100 flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Balance in USDT</span>
+                  <span className={`text-base font-black ${total >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>${total.toFixed(2)} USDT</span>
+                </div>
+              )
+            })()}
+          </div>
         </div>
       )}
 
