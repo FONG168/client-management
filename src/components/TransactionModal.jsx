@@ -295,7 +295,7 @@ export default function TransactionModal({ clientId, onClose, onSuccess }) {
                   type="text"
                   inputMode="decimal"
                   value={bankFeeValue}
-                  onChange={(e) => setBankFeeValue(bankFeeType === 'percent' ? e.target.value.replace(/[^0-9.]/g, '') : fmtInput(e.target.value, currency))}
+                  onChange={(e) => setBankFeeValue(e.target.value.replace(/[^0-9.]/g, ''))}
                   placeholder={bankFeeType === 'percent' ? 'e.g. 2.5' : '0'}
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm"
                 />
