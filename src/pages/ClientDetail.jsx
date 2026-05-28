@@ -533,12 +533,15 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {Object.entries(balanceByCurrency).map(([cur, { topups, withdrawals, totalFees, balance }], i, arr) => (
+                      {Object.entries(balanceByCurrency).map(([cur, { topups, withdrawals, topupFees, withdrawalFees, totalFees, balance }], i, arr) => (
                         <tr key={cur} className={i < arr.length - 1 ? 'border-b border-gray-100' : ''}>
                           <td className="px-4 py-3 font-black text-gray-900 text-sm">
                             {cur}
-                            {totalFees > 0 && (
-                              <p className="text-[10px] font-semibold text-amber-600 mt-0.5">−{formatAmount(totalFees, cur)} bank fee</p>
+                            {topupFees > 0 && (
+                              <p className="text-[10px] font-semibold text-amber-600 mt-0.5">−{formatAmount(topupFees, cur)} top-up fee</p>
+                            )}
+                            {withdrawalFees > 0 && (
+                              <p className="text-[10px] font-semibold text-amber-600 mt-0.5">+{formatAmount(withdrawalFees, cur)} withdrawal fee</p>
                             )}
                           </td>
                           <td className="px-4 py-3 text-right font-bold text-green-600 tabular-nums text-sm">{formatAmount(topups, cur)}</td>
@@ -592,7 +595,7 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                             </p>
                             {Number(txn.bank_fee_amount) > 0 && (
                               <p className="text-[10px] text-amber-600 font-medium mt-0.5">
-                                Fee {txn.bank_fee_type === 'percent' ? `${txn.bank_fee_value}%` : 'fixed'}: −{formatAmount(Number(txn.bank_fee_amount), txn.currency || 'USDT')}
+                                Fee {txn.bank_fee_type === 'percent' ? `${txn.bank_fee_value}%` : 'fixed'}: {txn.type === 'withdrawal' ? '+' : '−'}{formatAmount(Number(txn.bank_fee_amount), txn.currency || 'USDT')}
                               </p>
                             )}
                             {txn.notes && <p className="text-[10px] text-gray-400 mt-0.5">{txn.notes}</p>}
@@ -617,13 +620,16 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                       ))}
                     </tbody>
                     {/* Totals row */}
-                    {Object.entries(balanceByCurrency).map(([cur, { topups, withdrawals, totalFees, balance }]) => (
+                    {Object.entries(balanceByCurrency).map(([cur, { topups, withdrawals, topupFees, withdrawalFees, totalFees, balance }]) => (
                       <tfoot key={cur}>
                         <tr style={{ background: '#1e293b' }}>
                           <td className="px-4 py-3 align-middle" colSpan={2}>
                             <p className="text-[10px] font-black uppercase tracking-wider text-white/60">Total ({cur})</p>
-                            {totalFees > 0 && (
-                              <p className="text-[10px] text-amber-300/80 font-medium mt-0.5">Incl. {formatAmount(totalFees, cur)} bank fee</p>
+                            {topupFees > 0 && (
+                              <p className="text-[10px] text-amber-300/80 font-medium mt-0.5">−{formatAmount(topupFees, cur)} top-up fee</p>
+                            )}
+                            {withdrawalFees > 0 && (
+                              <p className="text-[10px] text-amber-300/80 font-medium mt-0.5">+{formatAmount(withdrawalFees, cur)} withdrawal fee</p>
                             )}
                           </td>
                           <td className="px-4 py-3 text-right text-sm font-black text-white/70 tabular-nums align-middle">{formatAmount(withdrawals, cur)}</td>
@@ -723,8 +729,11 @@ export default function ClientDetail() {
     if (txns.length === 0) return acc
     const topups = txns.filter((t) => t.type === 'topup').reduce((s, t) => s + Number(t.amount), 0)
     const withdrawals = txns.filter((t) => t.type === 'withdrawal').reduce((s, t) => s + Number(t.amount), 0)
-    const totalFees = txns.reduce((s, t) => s + Number(t.bank_fee_amount || 0), 0)
-    acc[cur] = { topups, withdrawals, totalFees, balance: topups - withdrawals - totalFees }
+    const topupFees = txns.filter((t) => t.type === 'topup').reduce((s, t) => s + Number(t.bank_fee_amount || 0), 0)
+    const withdrawalFees = txns.filter((t) => t.type === 'withdrawal').reduce((s, t) => s + Number(t.bank_fee_amount || 0), 0)
+    const totalFees = topupFees + withdrawalFees
+    // balance = (topups - topupFees) - (withdrawals + withdrawalFees)
+    acc[cur] = { topups, withdrawals, topupFees, withdrawalFees, totalFees, balance: topups - withdrawals - totalFees }
     return acc
   }, {})
   const activeCurrencies = Object.keys(balanceByCurrency)
@@ -842,7 +851,7 @@ export default function ClientDetail() {
       {activeCurrencies.length === 0 ? null : (
         <div className="space-y-3 mb-6">
           {activeCurrencies.map((cur) => {
-            const { topups, withdrawals, totalFees, balance } = balanceByCurrency[cur]
+            const { topups, withdrawals, topupFees, withdrawalFees, totalFees, balance } = balanceByCurrency[cur]
             return (
               <div key={cur} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
@@ -875,12 +884,25 @@ export default function ClientDetail() {
                   </div>
                 </div>
                 {totalFees > 0 && (
-                  <div className="px-5 py-2.5 border-t border-amber-100 bg-amber-50 flex items-center justify-between">
-                    <span className="text-xs text-amber-700 font-semibold flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-                      Bank Fees Deducted
-                    </span>
-                    <span className="text-xs font-black text-rose-600">−{formatAmount(totalFees, cur)}</span>
+                  <div className="px-5 py-2.5 border-t border-amber-100 bg-amber-50 space-y-1">
+                    {topupFees > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-amber-700 font-semibold flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                          Top-up Fee Deducted
+                        </span>
+                        <span className="text-xs font-black text-rose-600">−{formatAmount(topupFees, cur)}</span>
+                      </div>
+                    )}
+                    {withdrawalFees > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-amber-700 font-semibold flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                          Withdrawal Fee Added
+                        </span>
+                        <span className="text-xs font-black text-rose-600">+{formatAmount(withdrawalFees, cur)}</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -981,7 +1003,7 @@ export default function ClientDetail() {
                     </p>
                     {Number(txn.bank_fee_amount) > 0 && (
                       <p className="text-xs text-amber-600 mt-0.5">
-                        Fee: −{formatAmount(Number(txn.bank_fee_amount), txn.currency || 'USDT')}
+                        Fee: {txn.type === 'withdrawal' ? '+' : '−'}{formatAmount(Number(txn.bank_fee_amount), txn.currency || 'USDT')}
                       </p>
                     )}
                     <p className="text-xs text-gray-400 mt-0.5">
