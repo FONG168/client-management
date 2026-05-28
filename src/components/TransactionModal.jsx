@@ -109,7 +109,9 @@ export default function TransactionModal({ clientId, onClose, onSuccess }) {
   const bankFeeAmount = feeVal > 0
     ? (bankFeeType === 'percent' ? parsedAmt * (feeVal / 100) : feeVal)
     : 0
-  const netAmount = Math.max(0, parsedAmt - bankFeeAmount)
+  const netAmount = type === 'withdrawal'
+    ? parsedAmt + bankFeeAmount
+    : Math.max(0, parsedAmt - bankFeeAmount)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -302,8 +304,12 @@ export default function TransactionModal({ clientId, onClose, onSuccess }) {
               {bankFeeAmount > 0 && parsedAmt > 0 && (
                 <div className="px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-amber-700 font-semibold">Fee deducted</span>
-                    <span className="font-black text-rose-600">−{formatAmount(bankFeeAmount, currency)}</span>
+                    <span className="text-amber-700 font-semibold">
+                      {type === 'withdrawal' ? 'Fee added' : 'Fee deducted'}
+                    </span>
+                    <span className={`font-black ${type === 'withdrawal' ? 'text-rose-600' : 'text-rose-600'}`}>
+                      {type === 'withdrawal' ? '+' : '−'}{formatAmount(bankFeeAmount, currency)}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between border-t border-amber-200 pt-1.5">
                     <span className="text-amber-700 font-semibold">Net amount</span>
