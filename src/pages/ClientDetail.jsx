@@ -131,7 +131,6 @@ function EditTransactionModal({ txn, onClose, onSuccess }) {
 
   const parsedAmt = parseFloat(amount.replace(/,/g, '')) || 0
   const rateNum = parseFloat(exchangeRate) || 0
-  const usdtEquiv = rateNum > 0 && parsedAmt > 0 ? parsedAmt / rateNum : null
   const feeVal = parseFloat(bankFeeValue) || 0
   const bankFeeAmount = feeVal !== 0
     ? (bankFeeType === 'percent' ? parsedAmt * (feeVal / 100) : feeVal)
@@ -139,6 +138,7 @@ function EditTransactionModal({ txn, onClose, onSuccess }) {
   const netAmount = type === 'withdrawal'
     ? parsedAmt + bankFeeAmount
     : parsedAmt - bankFeeAmount
+  const usdtEquiv = rateNum > 0 && parsedAmt > 0 ? netAmount / rateNum : null
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -267,7 +267,7 @@ function EditTransactionModal({ txn, onClose, onSuccess }) {
               </div>
               {usdtEquiv !== null && (
                 <div className="mt-2 flex items-center justify-between px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-xl text-xs">
-                  <span className="text-indigo-600 font-semibold">{formatAmount(parsedAmt, currency)} ≈</span>
+                  <span className="text-indigo-600 font-semibold">{formatAmount(netAmount, currency)} ≈</span>
                   <span className="font-black text-indigo-700">${usdtEquiv.toFixed(2)} USDT</span>
                 </div>
               )}
@@ -316,12 +316,7 @@ function EditTransactionModal({ txn, onClose, onSuccess }) {
                   })()}
                   <div className="flex items-center justify-between border-t border-amber-200 pt-1.5">
                     <span className="text-amber-700 font-semibold">Net amount</span>
-                    <div className="text-right">
-                      <span className="font-bold text-gray-700">{formatAmount(netAmount, currency, true)}</span>
-                      {rateNum > 0 && (
-                        <span className="font-black text-indigo-600 ml-2">≈ ${(netAmount / rateNum).toFixed(2)} USDT</span>
-                      )}
-                    </div>
+                    <span className="font-bold text-gray-700">{formatAmount(netAmount, currency, true)}</span>
                   </div>
                 </div>
               )}
@@ -826,6 +821,23 @@ export default function ClientDetail() {
     acc[cur] = { topups, withdrawals, topupFees, withdrawalFees, totalFees, netTopups, netWithdrawals, balance }
     return acc
   }, {})
+
+  // Per-transaction USDT: each transaction divided by its own stored exchange_rate
+  const usdtByTxnRate = CURRENCIES.filter(c => c !== 'USDT').reduce((acc, cur) => {
+    const txns = transactions.filter(t => (t.currency || 'USDT') === cur)
+    if (txns.length === 0) return acc
+    const allHaveRate = txns.every(t => Number(t.exchange_rate) > 0)
+    if (!allHaveRate) { acc[cur] = null; return acc }
+    acc[cur] = txns.reduce((sum, t) => {
+      const fee = Number(t.bank_fee_amount || 0)
+      const net = t.type === 'topup'
+        ? Number(t.amount) - fee
+        : -(Number(t.amount) + fee)
+      return sum + net / Number(t.exchange_rate)
+    }, 0)
+    return acc
+  }, {})
+
   const activeCurrencies = Object.keys(balanceByCurrency)
   const initial = client.full_name?.charAt(0).toUpperCase() || '?'
   const avatarColor = getAvatarColor(client.full_name || '')
@@ -965,7 +977,8 @@ export default function ClientDetail() {
             const { topups, withdrawals, topupFees, withdrawalFees, totalFees, netTopups, netWithdrawals, balance } = balanceByCurrency[cur]
             const grossBalance = topups - withdrawals
             const rate = parseFloat(conversionRates[cur]) || 0
-            const usdtVal = cur !== 'USDT' && rate > 0 ? balance / rate : null
+            const autoUsdt = cur !== 'USDT' ? (usdtByTxnRate[cur] ?? null) : null
+            const usdtVal = autoUsdt !== null ? autoUsdt : (cur !== 'USDT' && rate > 0 ? balance / rate : null)
             return (
               <div key={cur} className={idx > 0 ? 'border-t border-gray-100' : ''}>
                 {/* Column headers */}
@@ -1021,27 +1034,36 @@ export default function ClientDetail() {
                   </div>
                 )}
 
-                {/* USDT rate input (non-USDT only) */}
+                {/* USDT conversion (non-USDT only) */}
                 {cur !== 'USDT' && (
-                  <div className="px-5 py-3 bg-indigo-50/40 border-t border-indigo-100/60 flex items-center gap-3">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider shrink-0">1 USDT =</span>
-                    <input
-                      type="number"
-                      value={conversionRates[cur]}
-                      onChange={e => setConversionRates(prev => ({ ...prev, [cur]: e.target.value }))}
-                      placeholder="Enter rate…"
-                      min="0"
-                      step="any"
-                      className="w-32 px-3 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                    />
-                    <span className="text-xs font-bold text-gray-400 shrink-0">{cur}</span>
-                    <div className="flex-1 text-right">
-                      {usdtVal !== null
-                        ? <span className={`text-sm font-black ${usdtVal >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>≈ ${usdtVal.toFixed(2)} USDT</span>
-                        : <span className="text-[11px] text-gray-300 italic">enter rate to convert</span>
-                      }
+                  autoUsdt !== null ? (
+                    <div className="px-5 py-3 bg-indigo-50/40 border-t border-indigo-100/60 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Per-transaction rate</span>
+                      <span className={`text-sm font-black ${autoUsdt >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>
+                        ≈ ${autoUsdt.toFixed(2)} USDT
+                      </span>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="px-5 py-3 bg-indigo-50/40 border-t border-indigo-100/60 flex items-center gap-3">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider shrink-0">1 USDT =</span>
+                      <input
+                        type="number"
+                        value={conversionRates[cur]}
+                        onChange={e => setConversionRates(prev => ({ ...prev, [cur]: e.target.value }))}
+                        placeholder="Enter rate…"
+                        min="0"
+                        step="any"
+                        className="w-32 px-3 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                      />
+                      <span className="text-xs font-bold text-gray-400 shrink-0">{cur}</span>
+                      <div className="flex-1 text-right">
+                        {usdtVal !== null
+                          ? <span className={`text-sm font-black ${usdtVal >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>≈ ${usdtVal.toFixed(2)} USDT</span>
+                          : <span className="text-[11px] text-gray-300 italic">enter rate to convert</span>
+                        }
+                      </div>
+                    </div>
+                  )
                 )}
               </div>
             )
@@ -1050,9 +1072,13 @@ export default function ClientDetail() {
           {/* Total USDT footer — only when all non-USDT rates are filled */}
           {activeCurrencies.some(c => c !== 'USDT') && (() => {
             const usdtDirect = balanceByCurrency['USDT']?.balance || 0
-            const allFilled = activeCurrencies.filter(c => c !== 'USDT').every(c => parseFloat(conversionRates[c]) > 0)
+            const allFilled = activeCurrencies.filter(c => c !== 'USDT').every(c =>
+              usdtByTxnRate[c] !== null && usdtByTxnRate[c] !== undefined ? true : parseFloat(conversionRates[c]) > 0
+            )
             if (!allFilled) return null
             const total = usdtDirect + activeCurrencies.filter(c => c !== 'USDT').reduce((sum, c) => {
+              const auto = usdtByTxnRate[c]
+              if (auto !== null && auto !== undefined) return sum + auto
               return sum + balanceByCurrency[c].balance / parseFloat(conversionRates[c])
             }, 0)
             return (

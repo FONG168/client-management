@@ -104,7 +104,6 @@ export default function TransactionModal({ clientId, onClose, onSuccess }) {
 
   const parsedAmt = parseFloat(amount.replace(/,/g, '')) || 0
   const rateNum = parseFloat(exchangeRate) || 0
-  const usdtEquiv = rateNum > 0 && parsedAmt > 0 ? parsedAmt / rateNum : null
   const feeVal = parseFloat(bankFeeValue) || 0
   const bankFeeAmount = feeVal !== 0
     ? (bankFeeType === 'percent' ? parsedAmt * (feeVal / 100) : feeVal)
@@ -112,6 +111,7 @@ export default function TransactionModal({ clientId, onClose, onSuccess }) {
   const netAmount = type === 'withdrawal'
     ? parsedAmt + bankFeeAmount
     : parsedAmt - bankFeeAmount
+  const usdtEquiv = rateNum > 0 && parsedAmt > 0 ? netAmount / rateNum : null
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -264,7 +264,7 @@ export default function TransactionModal({ clientId, onClose, onSuccess }) {
               </div>
               {usdtEquiv !== null && (
                 <div className="mt-2 flex items-center justify-between px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-xl text-xs">
-                  <span className="text-indigo-600 font-semibold">{formatAmount(parsedAmt, currency)} ≈</span>
+                  <span className="text-indigo-600 font-semibold">{formatAmount(netAmount, currency)} ≈</span>
                   <span className="font-black text-indigo-700">${usdtEquiv.toFixed(2)} USDT</span>
                 </div>
               )}
@@ -316,12 +316,7 @@ export default function TransactionModal({ clientId, onClose, onSuccess }) {
                   })()}
                   <div className="flex items-center justify-between border-t border-amber-200 pt-1.5">
                     <span className="text-amber-700 font-semibold">Net amount</span>
-                    <div className="text-right">
-                      <span className="font-bold text-gray-700">{formatAmount(netAmount, currency, true)}</span>
-                      {rateNum > 0 && (
-                        <span className="font-black text-indigo-600 ml-2">≈ ${(netAmount / rateNum).toFixed(2)} USDT</span>
-                      )}
-                    </div>
+                    <span className="font-bold text-gray-700">{formatAmount(netAmount, currency, true)}</span>
                   </div>
                 </div>
               )}
