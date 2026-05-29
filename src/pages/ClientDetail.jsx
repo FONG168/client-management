@@ -940,6 +940,25 @@ export default function ClientDetail() {
     return acc
   }, {})
 
+  // Per-transaction breakdown rows for the client page display
+  const pageUsdtBreakdown = (() => {
+    const result = {}
+    const nonUsdtTxns = transactions.filter(t => t.currency && t.currency !== 'USDT' && Number(t.exchange_rate) > 0)
+    for (const cur of [...new Set(nonUsdtTxns.map(t => t.currency))]) {
+      const rows = transactions
+        .filter(t => t.currency === cur && Number(t.exchange_rate) > 0)
+        .map(t => {
+          const amount = Number(t.amount)
+          const fee = Number(t.bank_fee_amount || 0)
+          const net = t.type === 'topup' ? amount - fee : -(amount + fee)
+          return { type: t.type, amount, fee, net, rate: Number(t.exchange_rate), usdt: net / Number(t.exchange_rate) }
+        })
+      result[cur] = { rows, totalUsdt: rows.reduce((s, r) => s + r.usdt, 0) }
+    }
+    return result
+  })()
+  const hasPageUsdtBreakdown = Object.keys(pageUsdtBreakdown).length > 0
+
   const activeCurrencies = Object.keys(balanceByCurrency)
   const initial = client.full_name?.charAt(0).toUpperCase() || '?'
   const avatarColor = getAvatarColor(client.full_name || '')
@@ -1193,6 +1212,64 @@ export default function ClientDetail() {
               </div>
             )
           })()}
+        </div>
+      )}
+
+      {/* USDT Conversion Breakdown */}
+      {hasPageUsdtBreakdown && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+            <UsdtIcon size={13} />
+            <span className="text-xs font-black text-gray-700 uppercase tracking-wider">USDT Conversion Breakdown</span>
+          </div>
+          {Object.entries(pageUsdtBreakdown).map(([cur, { rows, totalUsdt }]) => (
+            <div key={cur} className="overflow-x-auto">
+              <table className="w-full" style={{ minWidth: '580px' }}>
+                <thead>
+                  <tr className="bg-indigo-50 border-b border-indigo-100">
+                    <th className="px-4 py-2.5 text-left text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">Transaction</th>
+                    <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-gray-400">Original Amt</th>
+                    <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-amber-500">Bank Fee</th>
+                    <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-gray-600">Net {cur}</th>
+                    <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-gray-400">÷ Rate</th>
+                    <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">= USDT</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, i) => (
+                    <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                      <td className={`px-4 py-3 text-xs font-bold ${row.type === 'topup' ? 'text-green-700' : 'text-red-600'}`}>
+                        {row.type === 'topup' ? 'Top-up' : 'Withdrawal'}
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs font-semibold text-gray-700 tabular-nums whitespace-nowrap">
+                        {formatAmount(row.amount, cur, true)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs font-semibold text-amber-600 tabular-nums whitespace-nowrap">
+                        {row.fee > 0 ? `${row.type === 'topup' ? '−' : '+'}${formatAmount(row.fee, cur, true)}` : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs font-black text-gray-800 tabular-nums whitespace-nowrap">
+                        {row.net >= 0 ? '' : '−'}{formatAmount(Math.abs(row.net), cur, true)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs text-gray-400 tabular-nums whitespace-nowrap">
+                        ÷ {row.rate.toLocaleString('en-US')}
+                      </td>
+                      <td className={`px-4 py-3 text-right text-xs font-black tabular-nums whitespace-nowrap ${row.usdt >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                        {row.usdt >= 0 ? '+' : ''}${row.usdt.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-900">
+                    <td colSpan={5} className="px-4 py-3 text-xs font-black text-white">Total</td>
+                    <td className={`px-4 py-3 text-right text-sm font-black tabular-nums whitespace-nowrap ${totalUsdt >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                      {totalUsdt >= 0 ? '+' : ''}${totalUsdt.toFixed(2)} USDT {totalUsdt >= 0 ? '✓' : ''}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          ))}
         </div>
       )}
 
