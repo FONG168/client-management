@@ -1296,6 +1296,14 @@ export default function ClientDetail() {
                         </p>
                       </>
                     )}
+                    {(txn.currency && txn.currency !== 'USDT' && Number(txn.exchange_rate) > 0) && (() => {
+                      const usdt = (txn.type === 'topup' ? txn.netDisplay : -txn.netDisplay) / Number(txn.exchange_rate)
+                      return (
+                        <p className={`text-xs font-black mt-0.5 ${usdt >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                          ÷ {Number(txn.exchange_rate).toLocaleString('en-US')} = {usdt >= 0 ? '+' : ''}${usdt.toFixed(2)} USDT
+                        </p>
+                      )
+                    })()}
                     <p className="text-xs text-gray-400 mt-0.5">
                       Bal: <span className={txn.runningBalance >= 0 ? 'text-gray-600' : 'text-orange-500'}>
                         {formatAmount(txn.runningBalance, txn.currency || 'USDT')}
