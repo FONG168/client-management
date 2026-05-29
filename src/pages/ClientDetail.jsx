@@ -951,7 +951,7 @@ export default function ClientDetail() {
           const amount = Number(t.amount)
           const fee = Number(t.bank_fee_amount || 0)
           const net = t.type === 'topup' ? amount - fee : -(amount + fee)
-          return { type: t.type, amount, fee, net, rate: Number(t.exchange_rate), usdt: net / Number(t.exchange_rate) }
+          return { type: t.type, amount, fee, net, rate: Number(t.exchange_rate), usdt: net / Number(t.exchange_rate), created_at: t.created_at }
         })
       result[cur] = { rows, totalUsdt: rows.reduce((s, r) => s + r.usdt, 0) }
     }
@@ -1224,10 +1224,11 @@ export default function ClientDetail() {
           </div>
           {Object.entries(pageUsdtBreakdown).map(([cur, { rows, totalUsdt }]) => (
             <div key={cur} className="overflow-x-auto">
-              <table className="w-full" style={{ minWidth: '580px' }}>
+              <table className="w-full" style={{ minWidth: '740px' }}>
                 <thead>
                   <tr className="bg-indigo-50 border-b border-indigo-100">
                     <th className="px-4 py-2.5 text-left text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">Transaction</th>
+                    <th className="px-4 py-2.5 text-left text-[9px] font-black uppercase tracking-[.1em] text-gray-400">Date & Time</th>
                     <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-gray-400">Original Amt</th>
                     <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-amber-500">Bank Fee</th>
                     <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-gray-600">Net {cur}</th>
@@ -1240,6 +1241,14 @@ export default function ClientDetail() {
                     <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
                       <td className={`px-4 py-3 text-xs font-bold ${row.type === 'topup' ? 'text-green-700' : 'text-red-600'}`}>
                         {row.type === 'topup' ? 'Top-up' : 'Withdrawal'}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                        <p className="font-semibold text-gray-700">
+                          {new Date(row.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {new Date(row.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
                       </td>
                       <td className="px-4 py-3 text-right text-xs font-semibold text-gray-700 tabular-nums whitespace-nowrap">
                         {formatAmount(row.amount, cur, true)}
@@ -1261,7 +1270,7 @@ export default function ClientDetail() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-gray-900">
-                    <td colSpan={5} className="px-4 py-3 text-xs font-black text-white">Total</td>
+                    <td colSpan={6} className="px-4 py-3 text-xs font-black text-white">Total</td>
                     <td className={`px-4 py-3 text-right text-sm font-black tabular-nums whitespace-nowrap ${totalUsdt >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
                       {totalUsdt >= 0 ? '+' : ''}${totalUsdt.toFixed(2)} USDT {totalUsdt >= 0 ? '✓' : ''}
                     </td>
