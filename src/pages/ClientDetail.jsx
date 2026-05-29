@@ -1329,76 +1329,97 @@ export default function ClientDetail() {
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-gray-50">
-            {txnWithBalance.map((txn) => (
-              <div key={txn.id} className="group flex items-start gap-3 p-4 hover:bg-gray-50/50 transition-colors">
-                {/* Icon */}
-                <div className={`mt-0.5 shrink-0 ${txn.type === 'topup' ? 'text-green-500' : 'text-red-500'}`}>
-                  {txn.type === 'topup' ? <ArrowUpCircle size={22} /> : <ArrowDownCircle size={22} />}
-                </div>
-
-                {/* Details */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${txn.type === 'topup' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {txn.type === 'topup' ? 'Top-up' : 'Withdrawal'}
-                    </span>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
-                      {txn.currency || 'USDT'}
-                    </span>
-                    {txn.receipt_url && (
-                      <a href={txn.receipt_url} target="_blank" rel="noopener noreferrer"
-                        className="text-indigo-500 hover:text-indigo-700 transition-colors" title="View Receipt">
-                        <Receipt size={14} />
-                      </a>
-                    )}
-                  </div>
-                  {txn.notes && (
-                    <p className="text-sm text-gray-600 truncate">{txn.notes}</p>
-                  )}
-                  <p className="text-xs text-gray-400 mt-0.5">{formatDate(txn.created_at)}</p>
-                </div>
-
-                {/* Amounts + edit button */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => setEditingTxn(txn)}
-                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
-                    title="Edit transaction"
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <div className="text-right">
-                    <p className={`text-sm font-bold ${txn.type === 'topup' ? 'text-green-600' : 'text-red-600'}`}>
-                      {txn.type === 'topup' ? '+' : '−'}{formatAmount(Number(txn.amount), txn.currency || 'USDT')}
-                    </p>
-                    {Number(txn.bank_fee_amount) !== 0 && (
-                      <>
-                        <p className="text-xs text-amber-600 mt-0.5">
-                          Fee: {txn.type === 'withdrawal' ? '+' : '−'}{formatAmount(Math.abs(Number(txn.bank_fee_amount)), txn.currency || 'USDT')}
+          <div className="overflow-x-auto">
+            <table className="w-full" style={{ minWidth: '820px' }}>
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="px-4 py-3 text-left text-[9px] font-black uppercase tracking-[.1em] text-gray-400">Type</th>
+                  <th className="px-4 py-3 text-left text-[9px] font-black uppercase tracking-[.1em] text-gray-400">Date & Time</th>
+                  <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.1em] text-gray-400">Original Amt</th>
+                  <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.1em] text-amber-500">Bank Fee</th>
+                  <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.1em] text-gray-600">Net Amount</th>
+                  <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.1em] text-gray-400">÷ Rate</th>
+                  <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">= USDT</th>
+                  <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-[.1em] text-gray-400">Balance</th>
+                  <th className="px-4 py-3 w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {txnWithBalance.map((txn, i, arr) => {
+                  const cur = txn.currency || 'USDT'
+                  const isTopup = txn.type === 'topup'
+                  const fee = Number(txn.bank_fee_amount || 0)
+                  const hasRate = cur !== 'USDT' && Number(txn.exchange_rate) > 0
+                  const usdt = hasRate
+                    ? (isTopup ? txn.netDisplay : -txn.netDisplay) / Number(txn.exchange_rate)
+                    : null
+                  return (
+                    <tr key={txn.id} className={`group hover:bg-gray-50/60 transition-colors ${i < arr.length - 1 ? 'border-b border-gray-50' : ''}`}>
+                      {/* Type */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isTopup ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                            {isTopup ? 'Top-up' : 'Withdrawal'}
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-600">{cur}</span>
+                          {txn.receipt_url && (
+                            <a href={txn.receipt_url} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-600" title="Receipt">
+                              <Receipt size={12} />
+                            </a>
+                          )}
+                        </div>
+                        {txn.notes && <p className="text-[10px] text-gray-400 mt-0.5 max-w-[140px] truncate">{txn.notes}</p>}
+                      </td>
+                      {/* Date */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <p className="text-xs font-semibold text-gray-700">
+                          {new Date(txn.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </p>
-                        <p className={`text-xs font-semibold mt-0.5 ${txn.type === 'topup' ? 'text-green-700' : 'text-red-700'}`}>
-                          Net: {txn.type === 'topup' ? '+' : '−'}{formatAmount(txn.netDisplay, txn.currency || 'USDT')}
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {new Date(txn.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                         </p>
-                      </>
-                    )}
-                    {(txn.currency && txn.currency !== 'USDT' && Number(txn.exchange_rate) > 0) && (() => {
-                      const usdt = (txn.type === 'topup' ? txn.netDisplay : -txn.netDisplay) / Number(txn.exchange_rate)
-                      return (
-                        <p className={`text-xs font-black mt-0.5 ${usdt >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-                          ÷ {Number(txn.exchange_rate).toLocaleString('en-US')} = {usdt >= 0 ? '+' : ''}${usdt.toFixed(2)} USDT
-                        </p>
-                      )
-                    })()}
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Bal: <span className={txn.runningBalance >= 0 ? 'text-gray-600' : 'text-orange-500'}>
-                        {formatAmount(txn.runningBalance, txn.currency || 'USDT')}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
+                      </td>
+                      {/* Original Amt */}
+                      <td className={`px-4 py-3 text-right text-xs font-bold tabular-nums whitespace-nowrap ${isTopup ? 'text-green-600' : 'text-red-600'}`}>
+                        {isTopup ? '+' : '−'}{formatAmount(Number(txn.amount), cur, true)}
+                      </td>
+                      {/* Bank Fee */}
+                      <td className="px-4 py-3 text-right text-xs tabular-nums whitespace-nowrap">
+                        {fee > 0
+                          ? <span className="text-amber-600 font-semibold">{isTopup ? '−' : '+'}{formatAmount(fee, cur, true)}</span>
+                          : <span className="text-gray-300">—</span>}
+                      </td>
+                      {/* Net Amount */}
+                      <td className={`px-4 py-3 text-right text-xs font-black tabular-nums whitespace-nowrap ${isTopup ? 'text-green-700' : 'text-red-700'}`}>
+                        {isTopup ? '+' : '−'}{formatAmount(txn.netDisplay, cur, true)}
+                      </td>
+                      {/* ÷ Rate */}
+                      <td className="px-4 py-3 text-right text-[10px] text-gray-400 tabular-nums whitespace-nowrap">
+                        {hasRate ? `÷ ${Number(txn.exchange_rate).toLocaleString('en-US')}` : <span className="text-gray-200">—</span>}
+                      </td>
+                      {/* = USDT */}
+                      <td className={`px-4 py-3 text-right text-xs font-black tabular-nums whitespace-nowrap ${usdt === null ? 'text-gray-300' : usdt >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                        {usdt !== null ? `${usdt >= 0 ? '+' : ''}$${usdt.toFixed(2)}` : (cur === 'USDT' ? `${isTopup ? '+' : '−'}$${txn.netDisplay.toFixed(2)}` : '—')}
+                      </td>
+                      {/* Balance */}
+                      <td className={`px-4 py-3 text-right text-xs font-semibold tabular-nums whitespace-nowrap ${txn.runningBalance >= 0 ? 'text-gray-600' : 'text-orange-500'}`}>
+                        {formatAmount(txn.runningBalance, cur)}
+                      </td>
+                      {/* Edit */}
+                      <td className="px-3 py-3">
+                        <button
+                          onClick={() => setEditingTxn(txn)}
+                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                          title="Edit"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
