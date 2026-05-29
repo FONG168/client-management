@@ -413,9 +413,10 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
     const rows = transactions
       .filter(t => t.currency === cur && Number(t.exchange_rate) > 0)
       .map(t => {
+        const amount = Number(t.amount)
         const fee = Number(t.bank_fee_amount || 0)
-        const net = t.type === 'topup' ? Number(t.amount) - fee : -(Number(t.amount) + fee)
-        return { type: t.type, net, rate: Number(t.exchange_rate), usdt: net / Number(t.exchange_rate) }
+        const net = t.type === 'topup' ? amount - fee : -(amount + fee)
+        return { type: t.type, amount, fee, net, rate: Number(t.exchange_rate), usdt: net / Number(t.exchange_rate) }
       })
     usdtBreakdown[cur] = { rows, totalUsdt: rows.reduce((s, r) => s + r.usdt, 0) }
   }
@@ -629,28 +630,38 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                 {Object.entries(usdtBreakdown).map(([cur, { rows, totalUsdt }]) => (
                   <div key={cur} className="mb-3">
                     <div className="conv-table border border-indigo-200 rounded-xl overflow-hidden bg-white shadow-sm overflow-x-auto">
-                      <table className="w-full" style={{ minWidth: '400px' }}>
+                      <table className="w-full" style={{ minWidth: '620px' }}>
                         <thead>
                           <tr className="bg-indigo-50">
-                            <th className="px-4 py-2.5 text-left text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">Transaction</th>
-                            <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">Net {cur}</th>
-                            <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">÷ Stored Rate</th>
-                            <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">= USDT</th>
+                            <th className="px-3 py-2.5 text-left text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">Transaction</th>
+                            <th className="px-3 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">Original Amt</th>
+                            <th className="px-3 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-amber-500">Bank Fee</th>
+                            <th className="px-3 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">Net {cur}</th>
+                            <th className="px-3 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">÷ Rate</th>
+                            <th className="px-3 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">= USDT</th>
                           </tr>
                         </thead>
                         <tbody>
                           {rows.map((row, i) => (
                             <tr key={i} className={`border-b border-gray-100 ${row.type === 'topup' ? 'topup-row' : 'wd-row'}`}>
-                              <td className={`px-4 py-2.5 text-[11px] font-bold ${row.type === 'topup' ? 'text-green-700' : 'text-red-600'}`}>
+                              <td className={`px-3 py-2.5 text-[11px] font-bold ${row.type === 'topup' ? 'text-green-700' : 'text-red-600'}`}>
                                 {row.type === 'topup' ? 'Top-up' : 'Withdrawal'}
                               </td>
-                              <td className="px-4 py-2.5 text-right text-[11px] font-semibold text-gray-700 whitespace-nowrap">
+                              <td className="px-3 py-2.5 text-right text-[11px] font-semibold text-gray-700 whitespace-nowrap">
+                                {formatAmount(row.amount, cur, true)}
+                              </td>
+                              <td className="px-3 py-2.5 text-right text-[10px] font-semibold text-amber-600 whitespace-nowrap">
+                                {row.fee > 0
+                                  ? `${row.type === 'topup' ? '−' : '+'}${formatAmount(row.fee, cur, true)}`
+                                  : <span className="text-gray-300">—</span>}
+                              </td>
+                              <td className="px-3 py-2.5 text-right text-[11px] font-black text-gray-800 whitespace-nowrap">
                                 {row.net >= 0 ? '' : '−'}{formatAmount(Math.abs(row.net), cur, true)}
                               </td>
-                              <td className="rate-cell px-4 py-2.5 text-right text-[10px] text-gray-400 whitespace-nowrap">
+                              <td className="rate-cell px-3 py-2.5 text-right text-[10px] text-gray-400 whitespace-nowrap">
                                 ÷ {row.rate.toLocaleString('en-US')}
                               </td>
-                              <td className={`px-4 py-2.5 text-right text-[11px] font-black whitespace-nowrap ${row.usdt >= 0 ? 'usdt-pos text-green-700' : 'usdt-neg text-red-600'}`}>
+                              <td className={`px-3 py-2.5 text-right text-[11px] font-black whitespace-nowrap ${row.usdt >= 0 ? 'usdt-pos text-green-700' : 'usdt-neg text-red-600'}`}>
                                 {row.usdt >= 0 ? '+' : ''}${row.usdt.toFixed(2)}
                               </td>
                             </tr>
@@ -658,8 +669,8 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                         </tbody>
                         <tfoot>
                           <tr className="conv-total bg-gray-900">
-                            <td colSpan={3} className="px-4 py-3 text-[11px] font-black text-white">Total</td>
-                            <td className={`px-4 py-3 text-right text-[13px] font-black whitespace-nowrap ${totalUsdt >= 0 ? 'total-usdt-pos text-emerald-300' : 'total-usdt-neg text-red-300'}`}>
+                            <td colSpan={5} className="px-3 py-3 text-[11px] font-black text-white">Total</td>
+                            <td className={`px-3 py-3 text-right text-[13px] font-black whitespace-nowrap ${totalUsdt >= 0 ? 'total-usdt-pos text-emerald-300' : 'total-usdt-neg text-red-300'}`}>
                               {totalUsdt >= 0 ? '+' : ''}${totalUsdt.toFixed(2)} USDT {totalUsdt >= 0 ? '✓' : ''}
                             </td>
                           </tr>
