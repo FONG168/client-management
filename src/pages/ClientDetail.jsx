@@ -406,6 +406,25 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
     return [...acc, { ...txn, runningBalance, netDisplay, fee }]
   }, []).reverse()
 
+  // Per-transaction USDT breakdown for non-USDT currencies with stored rates
+  const usdtBreakdown = {}
+  const nonUsdtTxns = transactions.filter(t => t.currency && t.currency !== 'USDT' && Number(t.exchange_rate) > 0)
+  for (const cur of [...new Set(nonUsdtTxns.map(t => t.currency))]) {
+    const rows = transactions
+      .filter(t => t.currency === cur && Number(t.exchange_rate) > 0)
+      .map(t => {
+        const fee = Number(t.bank_fee_amount || 0)
+        const net = t.type === 'topup' ? Number(t.amount) - fee : -(Number(t.amount) + fee)
+        return { type: t.type, net, rate: Number(t.exchange_rate), usdt: net / Number(t.exchange_rate) }
+      })
+    usdtBreakdown[cur] = { rows, totalUsdt: rows.reduce((s, r) => s + r.usdt, 0) }
+  }
+  const hasUsdtBreakdown = Object.keys(usdtBreakdown).length > 0
+  const usdtDirect = (balanceByCurrency['USDT']?.balance) || 0
+  const totalUsdtAll = hasUsdtBreakdown
+    ? usdtDirect + Object.values(usdtBreakdown).reduce((s, { totalUsdt }) => s + totalUsdt, 0)
+    : null
+
   const now = new Date()
   const generatedAt = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   const oldest = transactions.length ? new Date(transactions[transactions.length - 1].created_at) : null
@@ -459,6 +478,21 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
       .tfoot-row .tfoot-bal{color:#fff;font-size:12px}
       .tfoot-row .tfoot-sub{font-size:8px;color:rgba(255,200,100,.8);margin-top:2px;font-weight:600}
       .footer{display:flex;justify-content:space-between;font-size:9px;color:#9ca3af;padding-top:12px;border-top:1px solid #e5e7eb;margin-top:20px}
+      .conv-section{margin-bottom:20px}
+      .conv-header{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.16em;color:#9ca3af;margin-bottom:8px}
+      .conv-table{width:100%;border-collapse:collapse;border:1px solid #e0e7ff;border-radius:10px;overflow:hidden}
+      .conv-table th{background:#eef2ff;padding:7px 12px;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#6366f1;border-bottom:2px solid #c7d2fe}
+      .conv-table th:not(:first-child){text-align:right}
+      .conv-table td{padding:8px 12px;font-size:10px;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums}
+      .conv-table td:not(:first-child){text-align:right}
+      .conv-table .topup-row td:first-child{color:#15803d;font-weight:700}
+      .conv-table .wd-row td:first-child{color:#dc2626;font-weight:700}
+      .conv-table .rate-cell{color:#6b7280;font-size:9px}
+      .conv-table .usdt-pos{color:#15803d;font-weight:800}
+      .conv-table .usdt-neg{color:#dc2626;font-weight:800}
+      .conv-total td{background:#1e293b;color:#fff;font-weight:900;font-size:11px;border-top:2px solid #334155;border-bottom:none}
+      .conv-total .total-usdt-pos{color:#6ee7b7;font-size:13px}
+      .conv-total .total-usdt-neg{color:#fca5a5;font-size:13px}
       @media print{body{padding:20px 28px}@page{margin:.6cm}}
     </style></head><body>${content}</body></html>`)
     win.document.close(); win.focus(); win.print(); win.close()
@@ -585,6 +619,63 @@ function StatementModal({ client, transactions, balanceByCurrency, onClose }) {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+
+            {/* USDT Conversion Breakdown */}
+            {hasUsdtBreakdown && (
+              <div className="conv-section">
+                <p className="sec-label text-[9px] font-black uppercase tracking-[.16em] text-gray-400 mb-2">USDT Conversion Breakdown</p>
+                {Object.entries(usdtBreakdown).map(([cur, { rows, totalUsdt }]) => (
+                  <div key={cur} className="mb-3">
+                    <div className="conv-table border border-indigo-200 rounded-xl overflow-hidden bg-white shadow-sm overflow-x-auto">
+                      <table className="w-full" style={{ minWidth: '400px' }}>
+                        <thead>
+                          <tr className="bg-indigo-50">
+                            <th className="px-4 py-2.5 text-left text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">Transaction</th>
+                            <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">Net {cur}</th>
+                            <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">÷ Stored Rate</th>
+                            <th className="px-4 py-2.5 text-right text-[9px] font-black uppercase tracking-[.1em] text-indigo-500">= USDT</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row, i) => (
+                            <tr key={i} className={`border-b border-gray-100 ${row.type === 'topup' ? 'topup-row' : 'wd-row'}`}>
+                              <td className={`px-4 py-2.5 text-[11px] font-bold ${row.type === 'topup' ? 'text-green-700' : 'text-red-600'}`}>
+                                {row.type === 'topup' ? 'Top-up' : 'Withdrawal'}
+                              </td>
+                              <td className="px-4 py-2.5 text-right text-[11px] font-semibold text-gray-700 whitespace-nowrap">
+                                {row.net >= 0 ? '' : '−'}{formatAmount(Math.abs(row.net), cur, true)}
+                              </td>
+                              <td className="rate-cell px-4 py-2.5 text-right text-[10px] text-gray-400 whitespace-nowrap">
+                                ÷ {row.rate.toLocaleString('en-US')}
+                              </td>
+                              <td className={`px-4 py-2.5 text-right text-[11px] font-black whitespace-nowrap ${row.usdt >= 0 ? 'usdt-pos text-green-700' : 'usdt-neg text-red-600'}`}>
+                                {row.usdt >= 0 ? '+' : ''}${row.usdt.toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="conv-total bg-gray-900">
+                            <td colSpan={3} className="px-4 py-3 text-[11px] font-black text-white">Total</td>
+                            <td className={`px-4 py-3 text-right text-[13px] font-black whitespace-nowrap ${totalUsdt >= 0 ? 'total-usdt-pos text-emerald-300' : 'total-usdt-neg text-red-300'}`}>
+                              {totalUsdt >= 0 ? '+' : ''}${totalUsdt.toFixed(2)} USDT {totalUsdt >= 0 ? '✓' : ''}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+                {totalUsdtAll !== null && Object.keys(balanceByCurrency).length > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 bg-indigo-700 rounded-xl text-white mt-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider opacity-80">Total Balance in USDT (all currencies)</span>
+                    <span className={`text-base font-black ${totalUsdtAll >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                      {totalUsdtAll >= 0 ? '+' : ''}${totalUsdtAll.toFixed(2)} USDT
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
