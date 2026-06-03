@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   ShieldCheck, TrendingUp, Users, Crown, Percent,
   ChevronDown, Filter, Search, CalendarDays, CheckCircle2, Clock,
-  Plus, X, Trash2, Pencil, Receipt, Wallet, Minus,
+  Plus, X, Trash2, Pencil, Receipt, Wallet, Minus, ExternalLink, ArrowRight,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
@@ -366,9 +367,102 @@ function ExpenseModal({ expense, onClose, onSave, onDelete }) {
   )
 }
 
+// ─── Record Confirm Modal ─────────────────────────────────────────────────────
+
+function RecordConfirmModal({ record, onClose, onConfirm }) {
+  const earning   = Number(record.total_earning) || 0
+  const adminDiv  = earning * ADMIN_RATE
+  const staffDiv  = earning * STAFF_RATE
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-violet-100 rounded-lg flex items-center justify-center">
+              <ExternalLink size={14} className="text-violet-600" />
+            </div>
+            <h3 className="text-sm font-black text-gray-900">View Original Transaction</h3>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
+            <X size={14} className="text-gray-400" />
+          </button>
+        </div>
+
+        {/* Record summary */}
+        <div className="px-6 py-5">
+          <div className="bg-gray-50 rounded-xl p-4 mb-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400 font-medium">Client</span>
+              <div className="text-right">
+                <p className="text-sm font-bold text-gray-900">{record.clients?.full_name || '—'}</p>
+                {record.clients?.user_id && (
+                  <p className="text-[11px] text-gray-400 font-mono">{record.clients.user_id}</p>
+                )}
+              </div>
+            </div>
+            <div className="h-px bg-gray-200" />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400 font-medium">Employee</span>
+              <div className="flex items-center gap-2">
+                <InitialAvatar name={record.employees?.name || '?'} size="sm" />
+                <span className="text-sm font-bold text-gray-900">{record.employees?.name || '—'}</span>
+              </div>
+            </div>
+            <div className="h-px bg-gray-200" />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400 font-medium">Total Earning</span>
+              <span className="text-sm font-bold text-gray-900">${fmt(earning)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-violet-500 font-medium">Admin 60%</span>
+              <span className="text-sm font-black text-violet-700">${fmt(adminDiv)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-emerald-500 font-medium">Staff 40%</span>
+              <span className="text-sm font-black text-emerald-700">${fmt(staffDiv)}</span>
+            </div>
+            {record.payment_date && (
+              <>
+                <div className="h-px bg-gray-200" />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400 font-medium">Payment Date</span>
+                  <span className="text-xs text-gray-600">{fmtDate(record.payment_date)}</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          <p className="text-xs text-gray-400 text-center mb-5">
+            You'll be taken to this client's page to view the full transaction history.
+          </p>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              className="flex-1 py-2.5 text-xs font-bold text-white bg-violet-600 rounded-xl hover:bg-violet-700 transition-colors flex items-center justify-center gap-1.5"
+            >
+              View Transaction <ArrowRight size={13} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function AdminDividend() {
+  const navigate = useNavigate()
+
   const [records,        setRecords]        = useState([])
   const [employees,      setEmployees]      = useState([])
   const [expenses,       setExpenses]       = useState([])
@@ -379,6 +473,7 @@ export default function AdminDividend() {
   const [monthFilter,    setMonthFilter]    = useState('all')
   const [showExpModal,   setShowExpModal]   = useState(false)
   const [editingExp,     setEditingExp]     = useState(null)
+  const [confirmRecord,  setConfirmRecord]  = useState(null)
 
   useEffect(() => { fetchAll() }, [])
 
@@ -534,6 +629,17 @@ export default function AdminDividend() {
           onClose={() => { setShowExpModal(false); setEditingExp(null) }}
           onSave={saveExpense}
           onDelete={deleteExpense}
+        />
+      )}
+
+      {confirmRecord && (
+        <RecordConfirmModal
+          record={confirmRecord}
+          onClose={() => setConfirmRecord(null)}
+          onConfirm={() => {
+            setConfirmRecord(null)
+            navigate(`/clients/${confirmRecord.client_id}`)
+          }}
         />
       )}
 
@@ -1016,7 +1122,12 @@ export default function AdminDividend() {
                       const adminDiv = earning * ADMIN_RATE
                       const staffDiv = earning * STAFF_RATE
                       return (
-                        <tr key={rec.id} className="hover:bg-gray-50 transition-colors">
+                        <tr
+                          key={rec.id}
+                          onClick={() => setConfirmRecord(rec)}
+                          className="hover:bg-violet-50/30 transition-colors cursor-pointer group"
+                          title="Click to view original transaction"
+                        >
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2.5">
                               <InitialAvatar name={rec.employees?.name || '?'} size="sm" />
@@ -1048,7 +1159,10 @@ export default function AdminDividend() {
                             )}
                           </td>
                           <td className="px-6 py-4 text-center">
-                            <span className="text-xs text-gray-500">{fmtDate(rec.payment_date)}</span>
+                            <div className="flex items-center justify-center gap-2">
+                              <span className="text-xs text-gray-500">{fmtDate(rec.payment_date)}</span>
+                              <ExternalLink size={11} className="text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                            </div>
                           </td>
                         </tr>
                       )
