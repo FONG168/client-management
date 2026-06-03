@@ -31,10 +31,19 @@ export function formatAmount(amount, currency, precise = false) {
   }
 }
 
+function todayLocal() {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export default function TransactionModal({ clientId, onClose, onSuccess }) {
   const [type, setType] = useState('topup')
   const [currency, setCurrency] = useState('USDT')
   const [amount, setAmount] = useState('')
+  const [transactionDate, setTransactionDate] = useState(todayLocal())
   const [bankFeeType, setBankFeeType] = useState('percent')
   const [bankFeeValue, setBankFeeValue] = useState('')
   const [notes, setNotes] = useState('')
@@ -134,6 +143,7 @@ export default function TransactionModal({ clientId, onClose, onSuccess }) {
           bank_fee_value: bankFeeAmount > 0 ? feeVal : null,
           bank_fee_amount: bankFeeAmount > 0 ? bankFeeAmount : null,
           notes: notes.trim() || null,
+          created_at: new Date(transactionDate).toISOString(),
         })
         .select()
         .single()
@@ -195,6 +205,18 @@ export default function TransactionModal({ clientId, onClose, onSuccess }) {
                 Withdrawal
               </button>
             </div>
+          </div>
+
+          {/* Date */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Date <span className="text-red-500">*</span></label>
+            <input
+              type="date"
+              value={transactionDate}
+              onChange={(e) => setTransactionDate(e.target.value)}
+              required
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+            />
           </div>
 
           {/* Currency Selector */}
