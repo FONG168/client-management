@@ -200,6 +200,7 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
   const [autoUsdtByTxnRate, setAutoUsdtByTxnRate] = useState({})
   const [bankFeeType, setBankFeeType] = useState('percent')
   const [bankFeeValue, setBankFeeValue] = useState('')
+  const [lastSettlementDate, setLastSettlementDate] = useState(null)
 
   const empRef = useRef(null)
   const cliRef = useRef(null)
@@ -220,13 +221,38 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
       setClientUsdtBreakdown(null)
       setManualRates({ IDR: '', VND: '', HKD: '' })
       setAutoUsdtByTxnRate({})
+      setLastSettlementDate(null)
       return
     }
     async function fetchClientData() {
       setLoadingEarning(true)
       try {
+        // Find the last paid commission for this employee+client pair to use as cutoff
+        let cutoffDate = null
+        if (employeeId) {
+          const { data: lastPaid } = await supabase
+            .from('commission_records')
+            .select('created_at')
+            .eq('employee_id', employeeId)
+            .eq('client_id', clientId)
+            .eq('status', 'paid')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          cutoffDate = lastPaid?.created_at || null
+          setLastSettlementDate(cutoffDate)
+        } else {
+          setLastSettlementDate(null)
+        }
+
+        let txnQuery = supabase
+          .from('transactions')
+          .select('type, currency, amount, bank_fee_amount, exchange_rate')
+          .eq('client_id', clientId)
+        if (cutoffDate) txnQuery = txnQuery.gt('created_at', cutoffDate)
+
         const [txnRes, ratesData] = await Promise.all([
-          supabase.from('transactions').select('type, currency, amount, bank_fee_amount, exchange_rate').eq('client_id', clientId),
+          txnQuery,
           fetch('https://api.frankfurter.app/latest?from=USD&to=IDR,HKD')
             .then(r => r.json()).catch(() => null)
         ])
@@ -283,7 +309,7 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
       }
     }
     fetchClientData()
-  }, [clientId])
+  }, [clientId, employeeId])
 
   // Reactively recalculate USDT total whenever rates or breakdown changes
   useEffect(() => {
@@ -485,10 +511,23 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
                 </div>
                 <span className="text-sm font-semibold text-gray-800">{selectedClient.full_name}</span>
                 {selectedClient.user_id && <span className="text-xs text-gray-400 font-mono">{selectedClient.user_id}</span>}
-                <button type="button" onClick={() => { setClientId(''); setClientSearch(''); setTotalEarning(''); setClientUsdtBreakdown(null); setManualRates({ IDR: '', VND: '', HKD: '' }) }} className="text-gray-400 hover:text-gray-600 ml-auto"><X size={13} /></button>
+                <button type="button" onClick={() => { setClientId(''); setClientSearch(''); setTotalEarning(''); setClientUsdtBreakdown(null); setManualRates({ IDR: '', VND: '', HKD: '' }); setLastSettlementDate(null) }} className="text-gray-400 hover:text-gray-600 ml-auto"><X size={13} /></button>
               </div>
             )}
           </div>
+
+          {/* Settlement notice */}
+          {lastSettlementDate && (
+            <div className="flex items-start gap-2.5 px-3.5 py-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <CheckCircle2 size={15} className="text-emerald-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-emerald-800">Previous commission cleared</p>
+                <p className="text-[11px] text-emerald-600 mt-0.5">
+                  Calculating only <span className="font-bold">new top-ups after {fmtDate(lastSettlementDate)}</span> — old balance already paid.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Total Earning */}
           <div className="space-y-1.5">
