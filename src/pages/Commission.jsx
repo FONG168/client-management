@@ -180,6 +180,48 @@ function AddEmployeeModal({ onClose, onSaved, editEmployee }) {
   )
 }
 
+// ─── Transaction breakdown helper ────────────────────────────────────────────
+
+function calcTransactionBreakdown(txns, ratesData) {
+  const byCurrency = {}
+  for (const t of txns) {
+    if (!byCurrency[t.currency]) byCurrency[t.currency] = { topups: 0, withdrawals: 0, totalFees: 0 }
+    if (t.type === 'topup') byCurrency[t.currency].topups += Number(t.amount)
+    else byCurrency[t.currency].withdrawals += Number(t.amount)
+    byCurrency[t.currency].totalFees += Number(t.bank_fee_amount || 0)
+  }
+  for (const cur of Object.keys(byCurrency)) {
+    byCurrency[cur].net = byCurrency[cur].topups - byCurrency[cur].withdrawals - byCurrency[cur].totalFees
+  }
+  const autoUsdt = {}
+  for (const cur of Object.keys(byCurrency)) {
+    const curTxns = txns.filter(t => t.currency === cur)
+    if (cur === 'USDT') {
+      autoUsdt[cur] = byCurrency[cur].net
+    } else {
+      const allHaveRate = curTxns.every(t => Number(t.exchange_rate) > 0)
+      if (allHaveRate) {
+        autoUsdt[cur] = curTxns.reduce((sum, t) => {
+          const fee = Number(t.bank_fee_amount || 0)
+          const net = t.type === 'topup' ? Number(t.amount) - fee : -(Number(t.amount) + fee)
+          return sum + net / Number(t.exchange_rate)
+        }, 0)
+      } else {
+        autoUsdt[cur] = null
+      }
+    }
+  }
+  return {
+    byCurrency,
+    autoUsdt,
+    manualRatesInit: {
+      IDR: ratesData?.rates?.IDR ? String(ratesData.rates.IDR.toFixed(2)) : '',
+      VND: '',
+      HKD: ratesData?.rates?.HKD ? String(ratesData.rates.HKD.toFixed(2)) : '',
+    },
+  }
+}
+
 // ─── Add Commission Modal ────────────────────────────────────────────────────
 
 function AddCommissionModal({ onClose, onSaved, employees, clients }) {
@@ -189,18 +231,17 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
   const [clientId, setClientId] = useState('')
   const [clientSearch, setClientSearch] = useState('')
   const [showClientDropdown, setShowClientDropdown] = useState(false)
-  const [totalEarning, setTotalEarning] = useState('')
   const [status, setStatus] = useState('unpaid')
   const [paymentDate, setPaymentDate] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
-  const [loadingEarning, setLoadingEarning] = useState(false)
-  const [clientUsdtBreakdown, setClientUsdtBreakdown] = useState(null)
+  const [transactions, setTransactions] = useState([])
+  const [selectedTxnIds, setSelectedTxnIds] = useState(new Set())
+  const [loadingTxns, setLoadingTxns] = useState(false)
+  const [hasOldRecords, setHasOldRecords] = useState(false)
   const [manualRates, setManualRates] = useState({ IDR: '', VND: '', HKD: '' })
-  const [autoUsdtByTxnRate, setAutoUsdtByTxnRate] = useState({})
   const [bankFeeType, setBankFeeType] = useState('percent')
   const [bankFeeValue, setBankFeeValue] = useState('')
-  const [lastSettlementDate, setLastSettlementDate] = useState(null)
 
   const empRef = useRef(null)
   const cliRef = useRef(null)
@@ -214,42 +255,53 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Fetch client transactions + pre-fill rate inputs from API as editable defaults
+  // Fetch uncommissioned transactions when client/employee changes
   useEffect(() => {
     if (!clientId) {
-      setTotalEarning('')
-      setClientUsdtBreakdown(null)
+      setTransactions([])
+      setSelectedTxnIds(new Set())
       setManualRates({ IDR: '', VND: '', HKD: '' })
-      setAutoUsdtByTxnRate({})
-      setLastSettlementDate(null)
+      setHasOldRecords(false)
       return
     }
-    async function fetchClientData() {
-      setLoadingEarning(true)
+    async function fetchTxns() {
+      setLoadingTxns(true)
       try {
-        // Find the last paid commission for this employee+client pair to use as cutoff
-        let cutoffDate = null
+        let assignedIds = []
+        let oldUntracked = false
+        let lastPaidDate = null
+        const oldCoveredCurrencies = new Set()
+
         if (employeeId) {
-          const { data: lastPaid } = await supabase
+          const { data: records } = await supabase
             .from('commission_records')
-            .select('created_at')
+            .select('status, transaction_ids, currency_breakdown, created_at')
             .eq('employee_id', employeeId)
             .eq('client_id', clientId)
-            .eq('status', 'paid')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-          cutoffDate = lastPaid?.created_at || null
-          setLastSettlementDate(cutoffDate)
-        } else {
-          setLastSettlementDate(null)
+
+          if (records && records.length > 0) {
+            for (const r of records) {
+              if (Array.isArray(r.transaction_ids)) {
+                assignedIds.push(...r.transaction_ids)
+              } else if (r.status === 'paid') {
+                oldUntracked = true
+                if (!lastPaidDate || r.created_at > lastPaidDate) lastPaidDate = r.created_at
+                if (r.currency_breakdown) {
+                  Object.keys(r.currency_breakdown).forEach(c => oldCoveredCurrencies.add(c))
+                }
+              }
+            }
+          }
         }
+        setHasOldRecords(oldUntracked)
 
         let txnQuery = supabase
           .from('transactions')
-          .select('type, currency, amount, bank_fee_amount, exchange_rate')
+          .select('id, type, currency, amount, bank_fee_amount, exchange_rate, created_at')
           .eq('client_id', clientId)
-        if (cutoffDate) txnQuery = txnQuery.gt('created_at', cutoffDate)
+          .order('created_at', { ascending: false })
+
+        if (assignedIds.length > 0) txnQuery = txnQuery.not('id', 'in', `(${assignedIds.join(',')})`)
 
         const [txnRes, ratesData] = await Promise.all([
           txnQuery,
@@ -258,65 +310,80 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
         ])
         if (txnRes.error) throw txnRes.error
 
-        const txns = txnRes.data || []
+        const allTxns = txnRes.data || []
 
-        // Build breakdown (gross amounts + fees per currency)
-        const byCurrency = {}
-        for (const t of txns) {
-          if (!byCurrency[t.currency]) byCurrency[t.currency] = { topups: 0, withdrawals: 0, totalFees: 0 }
-          if (t.type === 'topup') byCurrency[t.currency].topups += Number(t.amount)
-          else byCurrency[t.currency].withdrawals += Number(t.amount)
-          byCurrency[t.currency].totalFees += Number(t.bank_fee_amount || 0)
-        }
-        for (const cur of Object.keys(byCurrency)) {
-          byCurrency[cur].net = byCurrency[cur].topups - byCurrency[cur].withdrawals - byCurrency[cur].totalFees
-        }
-        setClientUsdtBreakdown(Object.keys(byCurrency).length > 0 ? byCurrency : null)
+        // For old paid records (no transaction_ids): use currency_breakdown to know which
+        // currencies were already paid, then only exclude those currencies before lastPaidDate.
+        // Currencies NOT in any old breakdown (e.g. USDT when only IDR was paid) always show.
+        const txns = oldUntracked && lastPaidDate
+          ? allTxns.filter(t =>
+              oldCoveredCurrencies.size > 0
+                ? (!oldCoveredCurrencies.has(t.currency) || t.created_at > lastPaidDate)
+                : t.created_at > lastPaidDate
+            )
+          : allTxns
 
-        // Per-transaction USDT: each transaction uses its own stored exchange_rate
-        const autoUsdt = {}
-        for (const cur of Object.keys(byCurrency)) {
-          const curTxns = txns.filter(t => t.currency === cur)
-          if (cur === 'USDT') {
-            autoUsdt[cur] = byCurrency[cur].net
-          } else {
-            const allHaveRate = curTxns.every(t => Number(t.exchange_rate) > 0)
-            if (allHaveRate) {
-              autoUsdt[cur] = curTxns.reduce((sum, t) => {
-                const fee = Number(t.bank_fee_amount || 0)
-                const net = t.type === 'topup'
-                  ? Number(t.amount) - fee
-                  : -(Number(t.amount) + fee)
-                return sum + net / Number(t.exchange_rate)
-              }, 0)
-            } else {
-              autoUsdt[cur] = null
-            }
-          }
-        }
-        setAutoUsdtByTxnRate(autoUsdt)
-
-        // Pre-fill rate inputs from API only for currencies without stored rates
+        setTransactions(txns)
+        setSelectedTxnIds(new Set(txns.map(t => t.id)))
         setManualRates({
           IDR: ratesData?.rates?.IDR ? String(ratesData.rates.IDR.toFixed(2)) : '',
           VND: '',
           HKD: ratesData?.rates?.HKD ? String(ratesData.rates.HKD.toFixed(2)) : '',
         })
       } catch (err) {
-        toast.error('Could not load client data')
+        toast.error('Could not load transactions')
       } finally {
-        setLoadingEarning(false)
+        setLoadingTxns(false)
       }
     }
-    fetchClientData()
+    fetchTxns()
   }, [clientId, employeeId])
 
-  // Reactively recalculate USDT total whenever rates or breakdown changes
-  useEffect(() => {
-    if (!clientUsdtBreakdown) return
+  const selectedTxns = useMemo(
+    () => transactions.filter(t => selectedTxnIds.has(t.id)),
+    [transactions, selectedTxnIds]
+  )
+
+  const breakdown = useMemo(() => {
+    const byCurrency = {}
+    for (const t of selectedTxns) {
+      if (!byCurrency[t.currency]) byCurrency[t.currency] = { topups: 0, withdrawals: 0, totalFees: 0 }
+      if (t.type === 'topup') byCurrency[t.currency].topups += Number(t.amount)
+      else byCurrency[t.currency].withdrawals += Number(t.amount)
+      byCurrency[t.currency].totalFees += Number(t.bank_fee_amount || 0)
+    }
+    for (const cur of Object.keys(byCurrency)) {
+      byCurrency[cur].net = byCurrency[cur].topups - byCurrency[cur].withdrawals - byCurrency[cur].totalFees
+    }
+    return byCurrency
+  }, [selectedTxns])
+
+  const autoUsdtMap = useMemo(() => {
+    const result = {}
+    for (const cur of Object.keys(breakdown)) {
+      const curTxns = selectedTxns.filter(t => t.currency === cur)
+      if (cur === 'USDT') {
+        result[cur] = breakdown[cur].net
+      } else {
+        const allHaveRate = curTxns.length > 0 && curTxns.every(t => Number(t.exchange_rate) > 0)
+        if (allHaveRate) {
+          result[cur] = curTxns.reduce((sum, t) => {
+            const fee = Number(t.bank_fee_amount || 0)
+            const net = t.type === 'topup' ? Number(t.amount) - fee : -(Number(t.amount) + fee)
+            return sum + net / Number(t.exchange_rate)
+          }, 0)
+        } else {
+          result[cur] = null
+        }
+      }
+    }
+    return result
+  }, [breakdown, selectedTxns])
+
+  const totalEarning = useMemo(() => {
     let total = 0
-    for (const [cur, vals] of Object.entries(clientUsdtBreakdown)) {
-      const auto = autoUsdtByTxnRate[cur]
+    for (const [cur, vals] of Object.entries(breakdown)) {
+      const auto = autoUsdtMap[cur]
       if (auto !== null && auto !== undefined) {
         total += auto
       } else if (cur === 'USDT') {
@@ -326,16 +393,15 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
         if (r > 0) total += vals.net / r
       }
     }
-    setTotalEarning(total > 0 ? String(total.toFixed(2)) : '')
-  }, [clientUsdtBreakdown, manualRates, autoUsdtByTxnRate])
+    return total
+  }, [breakdown, autoUsdtMap, manualRates])
 
   const selectedEmployee = employees.find(e => e.id === employeeId)
   const selectedClient = clients.find(c => c.id === clientId)
 
-  const earning = parseFloat(totalEarning) || 0
+  const earning = totalEarning
   const rate = selectedEmployee?.commission_rate || 0
-  const hasForeignCurrency = clientUsdtBreakdown &&
-    Object.keys(clientUsdtBreakdown).some(cur => cur !== 'USDT')
+  const hasForeignCurrency = Object.keys(breakdown).some(cur => cur !== 'USDT')
 
   const feeVal = parseFloat(bankFeeValue) || 0
   const bankFeeAmount = feeVal > 0
@@ -359,18 +425,19 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
     e.preventDefault()
     if (!employeeId) return toast.error('Select an employee')
     if (!clientId) return toast.error('Select a client (earn from)')
-    if (!earning || earning <= 0) return toast.error('Enter a valid total earning')
+    if (selectedTxnIds.size === 0) return toast.error('Select at least one transaction')
+    if (earning <= 0) return toast.error('Total earning must be greater than 0')
     if (status === 'paid' && !paymentDate) return toast.error('Select a payment date for paid commission')
 
-    const currencyBreakdown = clientUsdtBreakdown
+    const currencyBreakdown = Object.keys(breakdown).length > 0
       ? Object.fromEntries(
-          Object.entries(clientUsdtBreakdown).map(([cur, vals]) => {
-            const auto = autoUsdtByTxnRate[cur]
+          Object.entries(breakdown).map(([cur, vals]) => {
+            const auto = autoUsdtMap[cur]
+            const r = parseFloat(manualRates[cur])
             const usdt = auto !== null && auto !== undefined
               ? auto
-              : (cur === 'USDT' ? vals.net : (parseFloat(manualRates[cur]) > 0 ? vals.net / parseFloat(manualRates[cur]) : 0))
-            const r = cur === 'USDT' ? null : (parseFloat(manualRates[cur]) || null)
-            return [cur, { net: vals.net, rate: r, usdt: parseFloat(usdt.toFixed(4)) }]
+              : (cur === 'USDT' ? vals.net : (r > 0 ? vals.net / r : 0))
+            return [cur, { net: vals.net, rate: cur === 'USDT' ? null : (r || null), usdt: parseFloat(usdt.toFixed(4)) }]
           })
         )
       : null
@@ -390,6 +457,7 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
         payment_date: paymentDate || null,
         notes: notes.trim() || null,
         currency_breakdown: currencyBreakdown,
+        transaction_ids: Array.from(selectedTxnIds),
       })
       if (error) throw error
       toast.success('Commission record saved')
@@ -511,121 +579,156 @@ function AddCommissionModal({ onClose, onSaved, employees, clients }) {
                 </div>
                 <span className="text-sm font-semibold text-gray-800">{selectedClient.full_name}</span>
                 {selectedClient.user_id && <span className="text-xs text-gray-400 font-mono">{selectedClient.user_id}</span>}
-                <button type="button" onClick={() => { setClientId(''); setClientSearch(''); setTotalEarning(''); setClientUsdtBreakdown(null); setManualRates({ IDR: '', VND: '', HKD: '' }); setLastSettlementDate(null) }} className="text-gray-400 hover:text-gray-600 ml-auto"><X size={13} /></button>
+                <button type="button" onClick={() => { setClientId(''); setClientSearch('') }} className="text-gray-400 hover:text-gray-600 ml-auto"><X size={13} /></button>
               </div>
             )}
           </div>
 
-          {/* Settlement notice */}
-          {lastSettlementDate && (
-            <div className="flex items-start gap-2.5 px-3.5 py-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-              <CheckCircle2 size={15} className="text-emerald-600 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs font-bold text-emerald-800">Previous commission cleared</p>
-                <p className="text-[11px] text-emerald-600 mt-0.5">
-                  Calculating only <span className="font-bold">new top-ups after {fmtDate(lastSettlementDate)}</span> — old balance already paid.
-                </p>
+          {/* Transaction Checklist */}
+          {clientId && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Transactions</label>
+                {!loadingTxns && transactions.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setSelectedTxnIds(new Set(transactions.map(t => t.id)))}
+                      className="text-[11px] text-indigo-500 font-semibold hover:text-indigo-700 transition-colors">Select All</button>
+                    <span className="text-gray-300">·</span>
+                    <button type="button" onClick={() => setSelectedTxnIds(new Set())}
+                      className="text-[11px] text-gray-400 font-semibold hover:text-gray-600 transition-colors">None</button>
+                  </div>
+                )}
               </div>
+
+              {hasOldRecords && (
+                <div className="flex items-start gap-2.5 px-3.5 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                  <p className="text-[11px] text-amber-700 font-semibold leading-relaxed">
+                    Previous commissions for this client have no transaction tracking. All transactions are shown — uncheck any that were already paid.
+                  </p>
+                </div>
+              )}
+
+              {loadingTxns ? (
+                <div className="flex items-center justify-center py-8 gap-2 text-sm text-gray-400 bg-gray-50 rounded-xl">
+                  <div className="w-4 h-4 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+                  Loading transactions…
+                </div>
+              ) : transactions.length === 0 ? (
+                <div className="py-6 text-center text-sm text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  No new transactions found
+                </div>
+              ) : (
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="max-h-56 overflow-y-auto divide-y divide-gray-100">
+                    {transactions.map(t => {
+                      const checked = selectedTxnIds.has(t.id)
+                      const isTopup = t.type === 'topup'
+                      const feeAmt = Number(t.bank_fee_amount || 0)
+                      const net = isTopup ? Number(t.amount) - feeAmt : -(Number(t.amount) + feeAmt)
+                      const storedRate = Number(t.exchange_rate)
+                      const usdtVal = t.currency === 'USDT' ? net : (storedRate > 0 ? net / storedRate : null)
+                      return (
+                        <label key={t.id} className={`flex items-center gap-3 px-3.5 py-2.5 cursor-pointer transition-colors ${checked ? 'bg-indigo-50/60' : 'hover:bg-gray-50'}`}>
+                          <input type="checkbox" checked={checked}
+                            onChange={() => setSelectedTxnIds(prev => {
+                              const next = new Set(prev)
+                              if (next.has(t.id)) next.delete(t.id)
+                              else next.add(t.id)
+                              return next
+                            })}
+                            className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
+                          />
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${isTopup ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                            {isTopup ? 'IN' : 'OUT'}
+                          </span>
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 bg-gray-100 ${CURRENCY_COLORS[t.currency]?.value || 'text-gray-600'}`}>
+                            {t.currency}
+                          </span>
+                          <span className="text-[11px] text-gray-400 shrink-0">{fmtDate(t.created_at)}</span>
+                          <div className="flex-1 text-right">
+                            <span className={`text-xs font-semibold ${isTopup ? 'text-gray-800' : 'text-rose-600'}`}>{fmtCurr(Number(t.amount), t.currency)}</span>
+                            {feeAmt > 0 && <span className="ml-1 text-[10px] text-rose-400">−{fmtCurr(feeAmt, t.currency)}</span>}
+                          </div>
+                          {usdtVal !== null && (
+                            <span className="text-xs font-bold text-indigo-600 shrink-0 min-w-[54px] text-right">≈${fmt(usdtVal)}</span>
+                          )}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Per-currency summary */}
+              {!loadingTxns && Object.keys(breakdown).length > 0 && (
+                <div className="space-y-2 px-1 pt-1">
+                  {Object.entries(breakdown).map(([cur, vals]) => {
+                    const c = CURRENCY_COLORS[cur] || { bg: 'bg-gray-50', label: 'text-gray-400', value: 'text-gray-700' }
+                    const auto = autoUsdtMap[cur]
+                    const manualRate = parseFloat(manualRates[cur])
+                    const netUsdt = auto !== null && auto !== undefined
+                      ? auto
+                      : (cur === 'USDT' ? vals.net : (manualRate > 0 ? vals.net / manualRate : null))
+                    return (
+                      <div key={cur} className={`p-3 ${c.bg} rounded-xl space-y-2`}>
+                        <div className="grid grid-cols-4 gap-1 items-center">
+                          {cur === 'USDT'
+                            ? <span className={`inline-flex items-center gap-1 text-xs font-black ${c.value}`}><UsdtIcon size={14} /> USDT</span>
+                            : <span className={`text-xs font-black ${c.value}`}>{cur}</span>}
+                          <div className="text-center">
+                            <p className="text-[9px] text-gray-400 uppercase font-bold mb-0.5">Top-ups</p>
+                            <p className={`text-xs font-semibold ${c.value}`}>{fmtCurr(vals.topups, cur)}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-[9px] text-gray-400 uppercase font-bold mb-0.5">Withdrawals</p>
+                            <p className="text-xs font-semibold text-rose-600">{fmtCurr(vals.withdrawals, cur)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[9px] text-gray-400 uppercase font-bold mb-0.5">Net</p>
+                            <p className={`text-xs font-bold ${vals.net >= 0 ? 'text-gray-800' : 'text-rose-700'}`}>{fmtCurr(vals.net, cur)}</p>
+                          </div>
+                        </div>
+                        {cur !== 'USDT' && (
+                          auto !== null && auto !== undefined ? (
+                            <div className="flex items-center justify-between pt-1 border-t border-black/5">
+                              <span className="text-[10px] text-gray-400 font-semibold">Per-transaction rate</span>
+                              <span className={`text-xs font-black ${auto >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>≈ ${fmt(auto)}</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 pt-1 border-t border-black/5">
+                              <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 font-semibold shrink-0">1 <UsdtIcon size={12} /> =</span>
+                              <input
+                                type="number"
+                                value={manualRates[cur] ?? ''}
+                                onChange={e => setManualRates(prev => ({ ...prev, [cur]: e.target.value }))}
+                                placeholder="Enter rate…"
+                                min="0" step="any"
+                                className="flex-1 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 placeholder-gray-300 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
+                              />
+                              <span className="text-[11px] text-gray-500 font-semibold shrink-0">{cur}</span>
+                              <div className="text-right shrink-0 min-w-[70px]">
+                                {netUsdt != null
+                                  ? <span className={`text-xs font-black ${netUsdt >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>≈ ${fmt(netUsdt)}</span>
+                                  : <span className="text-xs text-gray-300 italic">—</span>}
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )
+                  })}
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-indigo-50 border border-indigo-100 rounded-xl">
+                    <div>
+                      <p className="text-xs font-bold text-indigo-800">Total converted to USDT</p>
+                      <p className="text-[11px] text-indigo-500">{selectedTxnIds.size} transaction{selectedTxnIds.size !== 1 ? 's' : ''} selected</p>
+                    </div>
+                    <span className="text-base font-black text-indigo-700">${fmt(totalEarning)}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
-
-          {/* Total Earning */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Earning (USDT) <span className="text-rose-400">*</span></label>
-              {loadingEarning && (
-                <span className="flex items-center gap-1 text-[11px] text-indigo-500 font-semibold">
-                  <div className="w-3 h-3 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
-                  Loading from client…
-                </span>
-              )}
-              {!loadingEarning && clientUsdtBreakdown && (
-                <span className="text-[11px] text-indigo-500 font-semibold">Auto-calculated · rates editable below</span>
-              )}
-            </div>
-            <div className="relative">
-              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"><DollarSign size={15} /></div>
-              <input
-                type="number"
-                value={totalEarning}
-                onChange={e => setTotalEarning(e.target.value)}
-                placeholder={loadingEarning ? 'Loading…' : '0.00'}
-                disabled={loadingEarning}
-                min="0"
-                step="0.01"
-                className={`${inputCls} ${loadingEarning ? 'opacity-50 cursor-not-allowed' : ''}`}
-              />
-            </div>
-            {!loadingEarning && clientUsdtBreakdown && (
-              <div className="space-y-2 px-1">
-                {Object.entries(clientUsdtBreakdown).map(([cur, vals]) => {
-                  const c = CURRENCY_COLORS[cur] || { bg: 'bg-gray-50', label: 'text-gray-400', value: 'text-gray-700' }
-                  const auto = autoUsdtByTxnRate[cur]
-                  const manualRate = parseFloat(manualRates[cur])
-                  const netUsdt = auto !== null && auto !== undefined
-                    ? auto
-                    : (cur === 'USDT' ? vals.net : (manualRate > 0 ? vals.net / manualRate : null))
-                  return (
-                    <div key={cur} className={`p-3 ${c.bg} rounded-xl space-y-2`}>
-                      {/* Row 1: currency + top-ups / withdrawals / net */}
-                      <div className="grid grid-cols-4 gap-1 items-center">
-                        {cur === 'USDT'
-                          ? <span className={`inline-flex items-center gap-1 text-xs font-black ${c.value}`}><UsdtIcon size={14} /> USDT</span>
-                          : <span className={`text-xs font-black ${c.value}`}>{cur}</span>
-                        }
-                        <div className="text-center">
-                          <p className="text-[9px] text-gray-400 uppercase font-bold mb-0.5">Top-ups</p>
-                          <p className={`text-xs font-semibold ${c.value}`}>{fmtCurr(vals.topups, cur)}</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-[9px] text-gray-400 uppercase font-bold mb-0.5">Withdrawals</p>
-                          <p className="text-xs font-semibold text-rose-600">{fmtCurr(vals.withdrawals, cur)}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[9px] text-gray-400 uppercase font-bold mb-0.5">Net</p>
-                          <p className={`text-xs font-bold ${vals.net >= 0 ? 'text-gray-800' : 'text-rose-700'}`}>{fmtCurr(vals.net, cur)}</p>
-                        </div>
-                      </div>
-                      {/* Row 2: per-transaction rate or manual fallback (non-USDT only) */}
-                      {cur !== 'USDT' && (
-                        auto !== null && auto !== undefined ? (
-                          <div className="flex items-center justify-between pt-1 border-t border-black/5">
-                            <span className="text-[10px] text-gray-400 font-semibold">Per-transaction rate</span>
-                            <span className={`text-xs font-black ${auto >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>≈ ${fmt(auto)}</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 pt-1 border-t border-black/5">
-                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 font-semibold shrink-0">1 <UsdtIcon size={12} /> =</span>
-                            <input
-                              type="number"
-                              value={manualRates[cur]}
-                              onChange={e => setManualRates(prev => ({ ...prev, [cur]: e.target.value }))}
-                              placeholder="Enter rate…"
-                              min="0"
-                              step="any"
-                              className="flex-1 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 placeholder-gray-300 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
-                            />
-                            <span className="text-[11px] text-gray-500 font-semibold shrink-0">{cur}</span>
-                            <div className="text-right shrink-0 min-w-[70px]">
-                              {netUsdt != null
-                                ? <span className={`text-xs font-black ${netUsdt >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>≈ ${fmt(netUsdt)}</span>
-                                : <span className="text-xs text-gray-300 italic">—</span>
-                              }
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  )
-                })}
-                {/* Total row */}
-                <div className="flex items-center justify-between px-3 py-2.5 bg-indigo-50 border border-indigo-100 rounded-xl">
-                  <p className="text-xs font-bold text-indigo-800">Total converted to USDT</p>
-                  <span className="text-base font-black text-indigo-700">${fmt(parseFloat(totalEarning) || 0)}</span>
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* Bank Fee Deduction */}
           {earning > 0 && hasForeignCurrency && (
@@ -947,17 +1050,54 @@ function CommissionStatementModal({ record, onClose }) {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-b border-gray-100">
-                      <td className="px-4 py-3 text-sm text-gray-700">Total Earning</td>
+                    {/* Per-currency rows */}
+                    {record.currency_breakdown && Object.entries(record.currency_breakdown).map(([cur, vals]) => (
+                      <tr key={cur} className="border-b border-gray-100">
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          <span className="font-semibold text-gray-800">{cur}</span>
+                          {cur !== 'USDT'
+                            ? <span className="ml-2 text-xs text-gray-400">{fmtCurr(vals.net, cur)}{vals.rate ? ` ÷ ${new Intl.NumberFormat('en-US').format(vals.rate)}` : ''}</span>
+                            : <span className="ml-2 text-xs text-gray-400">{fmtCurr(vals.net, cur)}</span>
+                          }
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-bold text-gray-900 tabular-nums">≈ ${fmt(vals.usdt)}</td>
+                      </tr>
+                    ))}
+
+                    {/* Total Earning */}
+                    <tr className={`border-b border-gray-100 ${record.currency_breakdown ? 'bg-gray-50' : ''}`}>
+                      <td className="px-4 py-3 text-sm font-bold text-gray-700">
+                        {record.currency_breakdown ? 'Total Earning (USDT)' : 'Total Earning'}
+                      </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-gray-900 tabular-nums">${fmt(record.total_earning)}</td>
                     </tr>
+
+                    {/* Bank fee rows */}
+                    {record.bank_fee_amount > 0 && (
+                      <>
+                        <tr className="border-b border-gray-100">
+                          <td className="px-4 py-3 text-sm text-rose-600">
+                            Bank Fee {record.bank_fee_type === 'percent' ? `(${record.bank_fee_value}%)` : '(Fixed)'}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-bold text-rose-600 tabular-nums">−${fmt(record.bank_fee_amount)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-100">
+                          <td className="px-4 py-3 text-sm font-bold text-gray-700">Net After Bank Fee</td>
+                          <td className="px-4 py-3 text-right text-sm font-bold text-gray-900 tabular-nums">${fmt(record.total_earning - record.bank_fee_amount)}</td>
+                        </tr>
+                      </>
+                    )}
+
+                    {/* Commission Rate */}
                     <tr className="border-b border-gray-100">
                       <td className="px-4 py-3 text-sm text-gray-700">
-                        Commission Rate
+                        Commission Rate ({emp.name})
                         <span className="ml-2 text-[10px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{record.commission_rate}%</span>
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-indigo-600 tabular-nums">× {record.commission_rate / 100}</td>
                     </tr>
+
+                    {/* Commission Earned */}
                     <tr className="bg-emerald-50">
                       <td className="px-4 py-3.5 text-sm font-black text-emerald-800">Commission Earned</td>
                       <td className="px-4 py-3.5 text-right text-base font-black text-emerald-700 tabular-nums">${fmt(record.commission_amount)}</td>
