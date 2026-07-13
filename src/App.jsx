@@ -6,6 +6,7 @@ import ClientForm from './pages/ClientForm'
 import ClientDetail from './pages/ClientDetail'
 import Commission from './pages/Commission'
 import AdminDividend from './pages/AdminDividend'
+import AgingSummary from './pages/AgingSummary'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="/clients/:id" element={<ClientDetail />} />
             <Route path="/clients/:id/edit" element={<ClientForm />} />
             <Route path="/commission" element={<Commission />} />
+            <Route path="/aging" element={<AgingSummary />} />
             <Route path="/admin" element={<AdminDividend />} />
           </Routes>
         </main>

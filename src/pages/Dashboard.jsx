@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   UserPlus, Search, Users, TrendingUp, TrendingDown, Wallet,
   ArrowUpCircle, ArrowDownCircle, ArrowUpRight, ArrowDownRight,
-  CalendarDays, Receipt, ChevronRight, Pencil
+  CalendarDays, Receipt, ChevronRight, ChevronLeft, Pencil
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
@@ -115,7 +115,7 @@ const CUR_STYLE = {
   HKD:  { badge: 'bg-teal-100 text-teal-700',    row: 'bg-white/8',  dot: 'bg-teal-400'   },
 }
 
-function MultiCurrencySummaryCard({ totals, rates, loading, onRateChange }) {
+function MultiCurrencySummaryCard({ totals, rates, loading, onRateChange, monthLabel }) {
   const [editingCur, setEditingCur] = useState(null)
   const [draftRate, setDraftRate] = useState('')
 
@@ -169,7 +169,7 @@ function MultiCurrencySummaryCard({ totals, rates, loading, onRateChange }) {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-white/50 uppercase tracking-widest">Financial Summary</p>
-              <p className="text-xs text-white/30 mt-0.5">Separated by currency</p>
+              <p className="text-xs text-white/30 mt-0.5">{monthLabel} · separated by currency</p>
             </div>
           </div>
           {!loading && (
@@ -283,9 +283,28 @@ export default function Dashboard() {
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
   const [exchangeRates, setExchangeRates] = useState(FALLBACK_RATES)
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const d = new Date()
+    return { year: d.getFullYear(), month: d.getMonth() }
+  })
 
   useEffect(() => { fetchAll() }, [])
+
+  const shiftMonth = (delta) => {
+    setSelectedMonth(prev => {
+      let month = prev.month + delta
+      let year = prev.year
+      if (month < 0) { month = 11; year -= 1 }
+      if (month > 11) { month = 0; year += 1 }
+      return { year, month }
+    })
+  }
+
+  const now = new Date()
+  const isCurrentMonth = selectedMonth.year === now.getFullYear() && selectedMonth.month === now.getMonth()
+  const monthLabel = new Date(selectedMonth.year, selectedMonth.month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
   const fetchAll = async () => {
     setLoading(true)
@@ -326,13 +345,21 @@ export default function Dashboard() {
   const totalsByCurrency = useMemo(() => {
     const res = {}
     for (const cur of CURRENCIES) {
-      const topups = clientsEnriched.reduce((s, c) => s + c.byCurrency[cur].topups, 0)
-      const withdrawals = clientsEnriched.reduce((s, c) => s + c.byCurrency[cur].withdrawals, 0)
-      const totalFees = clientsEnriched.reduce((s, c) => s + c.byCurrency[cur].totalFees, 0)
+      let topups = 0, withdrawals = 0, totalFees = 0
+      for (const c of clients) {
+        for (const t of c.transactions || []) {
+          if ((t.currency || 'USDT') !== cur) continue
+          const d = new Date(t.created_at)
+          if (d.getFullYear() !== selectedMonth.year || d.getMonth() !== selectedMonth.month) continue
+          if (t.type === 'topup') topups += Number(t.amount)
+          else if (t.type === 'withdrawal') withdrawals += Number(t.amount)
+          totalFees += Number(t.bank_fee_amount || 0)
+        }
+      }
       res[cur] = { topups, withdrawals, totalFees, balance: topups - withdrawals - totalFees }
     }
     return res
-  }, [clientsEnriched])
+  }, [clients, selectedMonth])
 
   const recentTransactions = useMemo(() => {
     const all = []
@@ -357,7 +384,15 @@ export default function Dashboard() {
     )
   }, [clientsEnriched, search])
 
-  const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const PAGE_SIZE = 10
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const paginated = useMemo(() =>
+    filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filtered, currentPage]
+  )
+
+  useEffect(() => { setPage(1) }, [search])
 
   return (
     <div className="min-h-screen bg-[#f5f6fa]">
@@ -370,9 +405,26 @@ export default function Dashboard() {
             <p className="text-sm text-gray-400 mt-0.5">Overview of your clients and transactions</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-sm text-gray-500 shadow-sm">
-              <CalendarDays size={14} className="text-indigo-400" />
-              <span className="font-medium">{today}</span>
+            <div className="hidden sm:flex items-center gap-0.5 bg-white border border-gray-200 rounded-xl px-1.5 py-1.5 text-sm text-gray-500 shadow-sm">
+              <button
+                onClick={() => shiftMonth(-1)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                aria-label="Previous month"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span className="flex items-center gap-1.5 px-2 font-medium min-w-[130px] justify-center">
+                <CalendarDays size={14} className="text-indigo-400" />
+                {monthLabel}
+              </span>
+              <button
+                onClick={() => shiftMonth(1)}
+                disabled={isCurrentMonth}
+                className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                aria-label="Next month"
+              >
+                <ChevronRight size={14} />
+              </button>
             </div>
             <Link
               to="/clients/new"
@@ -393,6 +445,7 @@ export default function Dashboard() {
             totals={totalsByCurrency}
             rates={exchangeRates}
             loading={loading}
+            monthLabel={monthLabel}
             onRateChange={(cur, val) => setExchangeRates(prev => ({ ...prev, [cur]: val }))}
           />
         </div>
@@ -572,7 +625,7 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((client, i) => (
+                  {paginated.map((client, i) => (
                     <tr key={client.id}
                       className={`border-b border-gray-50 hover:bg-indigo-50/30 transition-colors group ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
                       <td className="px-6 py-4">
@@ -624,6 +677,43 @@ export default function Dashboard() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {!loading && filtered.length > 0 && totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-3.5 border-t border-gray-100">
+              <p className="text-xs text-gray-400">
+                Showing <span className="font-semibold text-gray-600">{(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)}</span> of <span className="font-semibold text-gray-600">{filtered.length}</span>
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setPage(n)}
+                    className={`min-w-[28px] h-7 px-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      n === currentPage ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Next page"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
             </div>
           )}
         </div>

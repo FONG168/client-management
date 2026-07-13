@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Users, DollarSign, Plus, Search, Percent, CheckCircle2, Clock,
-  Trash2, X, ChevronDown, CalendarDays, TrendingUp, Banknote,
+  Trash2, X, ChevronDown, ChevronLeft, ChevronRight, CalendarDays, TrendingUp, Banknote,
   UserCheck, Filter, Edit2, Save, AlertCircle, Receipt, Upload,
   FileText, Eye, ImageIcon, Printer
 } from 'lucide-react'
@@ -58,6 +58,7 @@ const CURRENCY_COLORS = {
   VND:  { bg: 'bg-violet-50',  label: 'text-violet-400',  value: 'text-violet-700'  },
   HKD:  { bg: 'bg-teal-50',    label: 'text-teal-400',    value: 'text-teal-700'    },
 }
+
 
 const inputCls = "w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
 const inputClsNoIcon = "w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
@@ -1594,6 +1595,11 @@ export default function Commission() {
   const [recordSearch, setRecordSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all') // 'all' | 'paid' | 'unpaid'
   const [employeeFilter, setEmployeeFilter] = useState('all')
+  const [recordPage, setRecordPage] = useState(1)
+  const [statsMonth, setStatsMonth] = useState(() => {
+    const d = new Date()
+    return { year: d.getFullYear(), month: d.getMonth() }
+  })
 
   useEffect(() => { fetchAll() }, [])
 
@@ -1648,10 +1654,28 @@ export default function Commission() {
     }
   }
 
-  // ── Stats ──
-  const totalCommission = records.reduce((s, r) => s + (r.commission_amount || 0), 0)
-  const unpaidCommission = records.filter(r => r.status === 'unpaid').reduce((s, r) => s + (r.commission_amount || 0), 0)
-  const paidCommission = records.filter(r => r.status === 'paid').reduce((s, r) => s + (r.commission_amount || 0), 0)
+  // ── Stats (scoped to selected month) ──
+  const shiftStatsMonth = (delta) => {
+    setStatsMonth(prev => {
+      let month = prev.month + delta
+      let year = prev.year
+      if (month < 0) { month = 11; year -= 1 }
+      if (month > 11) { month = 0; year += 1 }
+      return { year, month }
+    })
+  }
+  const nowForStats = new Date()
+  const isStatsCurrentMonth = statsMonth.year === nowForStats.getFullYear() && statsMonth.month === nowForStats.getMonth()
+  const statsMonthLabel = new Date(statsMonth.year, statsMonth.month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  const monthlyRecords = useMemo(() => records.filter(r => {
+    const d = new Date(r.created_at)
+    return d.getFullYear() === statsMonth.year && d.getMonth() === statsMonth.month
+  }), [records, statsMonth])
+
+  const totalCommission = monthlyRecords.reduce((s, r) => s + (r.commission_amount || 0), 0)
+  const unpaidCommission = monthlyRecords.filter(r => r.status === 'unpaid').reduce((s, r) => s + (r.commission_amount || 0), 0)
+  const paidCommission = monthlyRecords.filter(r => r.status === 'paid').reduce((s, r) => s + (r.commission_amount || 0), 0)
 
   // ── Filtered records ──
   const filteredRecords = useMemo(() => {
@@ -1669,6 +1693,16 @@ export default function Commission() {
     return list
   }, [records, statusFilter, employeeFilter, recordSearch])
 
+  const RECORDS_PAGE_SIZE = 10
+  const recordTotalPages = Math.max(1, Math.ceil(filteredRecords.length / RECORDS_PAGE_SIZE))
+  const recordCurrentPage = Math.min(recordPage, recordTotalPages)
+  const paginatedRecords = useMemo(() =>
+    filteredRecords.slice((recordCurrentPage - 1) * RECORDS_PAGE_SIZE, recordCurrentPage * RECORDS_PAGE_SIZE),
+    [filteredRecords, recordCurrentPage]
+  )
+
+  useEffect(() => { setRecordPage(1) }, [statusFilter, employeeFilter, recordSearch])
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
@@ -1677,7 +1711,28 @@ export default function Commission() {
           <h1 className="text-2xl font-black text-gray-900 tracking-tight">Commission</h1>
           <p className="text-sm text-gray-400 mt-0.5">Manage employee commissions and payment records</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-0.5 bg-white border border-gray-200 rounded-xl px-1.5 py-1.5 text-sm text-gray-500 shadow-sm">
+            <button
+              onClick={() => shiftStatsMonth(-1)}
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              aria-label="Previous month"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="flex items-center gap-1.5 px-2 font-medium min-w-[130px] justify-center">
+              <CalendarDays size={14} className="text-indigo-400" />
+              {statsMonthLabel}
+            </span>
+            <button
+              onClick={() => shiftStatsMonth(1)}
+              disabled={isStatsCurrentMonth}
+              className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              aria-label="Next month"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
           <button
             onClick={() => { setShowAddEmployee(true); setTab('employees') }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors border border-indigo-100">
@@ -1703,6 +1758,7 @@ export default function Commission() {
           </div>
           <p className="relative text-[11px] font-semibold text-white/70 uppercase tracking-widest mb-1">Total Commission</p>
           <p className="relative text-2xl font-black text-white">{loading ? '—' : `$${fmt(totalCommission)}`}</p>
+          <p className="relative text-[11px] font-medium text-white/40 mt-1">{statsMonthLabel}</p>
         </div>
 
         <div className="relative rounded-2xl p-5 overflow-hidden bg-gradient-to-br from-amber-400 to-orange-500 shadow-sm">
@@ -1715,6 +1771,7 @@ export default function Commission() {
           </div>
           <p className="relative text-[11px] font-semibold text-white/70 uppercase tracking-widest mb-1">Unpaid</p>
           <p className="relative text-2xl font-black text-white">{loading ? '—' : `$${fmt(unpaidCommission)}`}</p>
+          <p className="relative text-[11px] font-medium text-white/40 mt-1">{statsMonthLabel}</p>
         </div>
 
         <div className="relative rounded-2xl p-5 overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-600 shadow-sm">
@@ -1727,6 +1784,7 @@ export default function Commission() {
           </div>
           <p className="relative text-[11px] font-semibold text-white/70 uppercase tracking-widest mb-1">Paid Out</p>
           <p className="relative text-2xl font-black text-white">{loading ? '—' : `$${fmt(paidCommission)}`}</p>
+          <p className="relative text-[11px] font-medium text-white/40 mt-1">{statsMonthLabel}</p>
         </div>
       </div>
 
@@ -1921,7 +1979,7 @@ export default function Commission() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredRecords.map(rec => (
+                    {paginatedRecords.map(rec => (
                       <tr key={rec.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2.5">
@@ -2007,7 +2065,7 @@ export default function Commission() {
 
               {/* Mobile Cards */}
               <div className="md:hidden divide-y divide-gray-50">
-                {filteredRecords.map(rec => (
+                {paginatedRecords.map(rec => (
                   <div key={rec.id} className="px-4 py-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
@@ -2084,6 +2142,43 @@ export default function Commission() {
                 ))}
               </div>
             </>
+          )}
+
+          {!loading && filteredRecords.length > 0 && recordTotalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-3.5 border-t border-gray-100">
+              <p className="text-xs text-gray-400">
+                Showing <span className="font-semibold text-gray-600">{(recordCurrentPage - 1) * RECORDS_PAGE_SIZE + 1}–{Math.min(recordCurrentPage * RECORDS_PAGE_SIZE, filteredRecords.length)}</span> of <span className="font-semibold text-gray-600">{filteredRecords.length}</span>
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setRecordPage(p => Math.max(1, p - 1))}
+                  disabled={recordCurrentPage === 1}
+                  className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                {Array.from({ length: recordTotalPages }, (_, i) => i + 1).map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setRecordPage(n)}
+                    className={`min-w-[28px] h-7 px-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      n === recordCurrentPage ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setRecordPage(p => Math.min(recordTotalPages, p + 1))}
+                  disabled={recordCurrentPage === recordTotalPages}
+                  className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Next page"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Users, DollarSign, Crown } from 'lucide-react'
+import { Users, DollarSign, Crown, Clock } from 'lucide-react'
 
 export default function Navbar() {
   const { pathname } = useLocation()
@@ -39,6 +39,16 @@ export default function Navbar() {
             }`}
           >
             <DollarSign size={14} /> Commission
+          </Link>
+          <Link
+            to="/aging"
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              pathname.startsWith('/aging')
+                ? 'text-rose-600 bg-rose-50'
+                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+            }`}
+          >
+            <Clock size={14} /> Aging Summary
           </Link>
           <Link
             to="/admin"
